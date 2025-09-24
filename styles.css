@@ -1,0 +1,89 @@
+body {
+    background-color: #f8f9fa;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.navbar-brand {
+    font-weight: 600;
+}
+
+.card {
+    border: none;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.card-header {
+    background: linear-gradient(135deg, #007bff, #0056b3);
+    color: white;
+    border-radius: 10px 10px 0 0 !important;
+}
+
+.order-card {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    margin-bottom: 20px;
+}
+
+.order-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.order-card .card-header {
+    padding: 15px 20px;
+    font-weight: 600;
+}
+
+.order-card .card-body {
+    padding: 20px;
+}
+
+.badge {
+    font-size: 0.8rem;
+}
+
+.cliente-info {
+    border-left: 4px solid #007bff;
+    padding-left: 15px;
+    margin-bottom: 15px;
+}
+
+.domicilio-info {
+    border-left: 4px solid #28a745;
+    padding-left: 15px;
+    margin-bottom: 15px;
+}
+
+.instalacion-info {
+    border-left: 4px solid #ffc107;
+    padding-left: 15px;
+}
+
+.btn-action {
+    margin-top: 10px;
+}
+
+.form-label {
+    font-weight: 500;
+    color: #495057;
+}
+
+.nav-tabs .nav-link {
+    font-weight: 500;
+    color: #6c757d;
+}
+
+.nav-tabs .nav-link.active {
+    color: #007bff;
+    font-weight: 600;
+}
+
+@media (max-width: 768px) {
+    .order-card {
+        margin-bottom: 15px;
+    }
+    
+    .card-body {
+        padding: 15px;
+    }
+}

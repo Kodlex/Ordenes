@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - Administrador</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    body {
+      background-color: #f8f9fa;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    .login-card {
+      width: 350px;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+      background-color: white;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <h4 class="text-center mb-4"><i class="fas fa-user-shield me-2"></i>Login Administrador</h4>
+    <form id="loginForm">
+      <div class="mb-3">
+        <label for="username" class="form-label">Usuario</label>
+        <input type="text" class="form-control" id="username" required>
+      </div>
+      <div class="mb-3">
+        <label for="password" class="form-label">Contraseña</label>
+        <input type="password" class="form-control" id="password" required>
+      </div>
+      <button type="submit" class="btn btn-primary w-100"><i class="fas fa-sign-in-alt me-2"></i>Ingresar</button>
+      <div id="loginError" class="text-danger mt-2 text-center" style="display:none;">Usuario o contraseña incorrecta</div>
+    </form>
+  </div>
+
+  <script>
+    const admins = {
+      "admin1": {user: "admin1", pass: "admin123"},
+      "admin2": {user: "admin2", pass: "admin123"},
+      "admin3": {user: "admin3", pass: "admin123"},
+      "admin4": {user: "admin4", pass: "admin123"},
+      "admin5": {user: "admin5", pass: "admin123"}
+    };
+
+    const loginForm = document.getElementById('loginForm');
+    const loginError = document.getElementById('loginError');
+
+    loginForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value.trim();
+
+      const isAdmin = Object.keys(admins).find(id => admins[id].user === username && admins[id].pass === password);
+
+      if (isAdmin) {
+        localStorage.setItem('userType', 'admin');
+        localStorage.setItem('userName', username);
+        window.location.href = 'index.html';
+      } else {
+        loginError.style.display = 'block';
+      }
+    });
+  </script>
+</body>
+</html>

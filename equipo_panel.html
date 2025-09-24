@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Panel del Equipo Instalador</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <nav class="navbar navbar-dark bg-dark">
+    <div class="container">
+      <span class="navbar-brand"><i class="fas fa-tools me-2"></i> Panel del Equipo Instalador</span>
+      <div class="d-flex">
+          <span class="navbar-text me-3 text-light" id="userDisplay"></span>
+          <button id="logoutBtn" class="btn btn-outline-light btn-sm">Cerrar Sesión</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container mt-4">
+    <h4>Órdenes asignadas</h4>
+    <div class="row mt-3" id="teamOrdersContainer"></div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="script_equipo_firebase.js"></script>
+</body>
+</html>

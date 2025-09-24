@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Órdenes de Instalación - ISP</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="#"><i class="fas fa-wifi me-2"></i>GOWIGO - Órdenes de Instalación</a>
+            <div class="d-flex">
+                <span class="navbar-text me-3 text-light" id="userDisplay"></span>
+                <button id="logoutBtn" class="btn btn-outline-light btn-sm">Cerrar Sesión</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <ul class="nav nav-tabs" id="myTab" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="form-tab" data-bs-toggle="tab" data-bs-target="#form" type="button" role="tab" aria-controls="form" aria-selected="true">
+                    <i class="fas fa-plus-circle me-2"></i>Nueva Orden
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="orders-tab" data-bs-toggle="tab" data-bs-target="#orders" type="button" role="tab" aria-controls="orders" aria-selected="false">
+                    <i class="fas fa-list-ul me-2"></i>Pendientes
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="completed-tab" data-bs-toggle="tab" data-bs-target="#completed" type="button" role="tab" aria-controls="completed" aria-selected="false">
+                    <i class="fas fa-check-circle me-2"></i>Completadas
+                </button>
+            </li>
+        </ul>
+        <div class="tab-content mt-3">
+            <div class="tab-pane fade show active" id="form" role="tabpanel" aria-labelledby="form-tab">
+                <form id="orderForm" class="p-4 border rounded shadow-sm">
+                    <h5 class="text-primary mb-4"><i class="fas fa-file-invoice me-2"></i>Datos de la Orden</h5>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="nombre" class="form-label">Nombre del Cliente *</label>
+                            <input type="text" class="form-control" id="nombre" name="nombre" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="dni" class="form-label">DNI *</label>
+                            <input type="text" class="form-control" id="dni" name="dni" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="numeroCliente" class="form-label">N° de Cliente</label>
+                            <input type="text" class="form-control" id="numeroCliente" name="numeroCliente">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="telefono" class="form-label">Teléfono *</label>
+                            <input type="tel" class="form-control" id="telefono" name="telefono" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="email" class="form-label">Email</label>
+                            <input type="email" class="form-control" id="email" name="email">
+                        </div>
+                    </div>
+
+                    <h6 class="text-primary mb-3 mt-4"><i class="fas fa-map-marked-alt me-2"></i>Ubicación</h6>
+                    <div class="row">
+                        <div class="col-md-8 mb-3">
+                            <label for="direccion" class="form-label">Dirección *</label>
+                            <input type="text" class="form-control" id="direccion" name="direccion" required>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="numero" class="form-label">Número *</label>
+                            <input type="text" class="form-control" id="numero" name="numero" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="ubicacion" class="form-label">Ubicación (Google Maps)</label>
+                            <input type="url" class="form-control" id="ubicacion" name="ubicacion">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="zona" class="form-label">Zona *</label>
+                            <input type="text" class="form-control" id="zona" name="zona" required>
+                        </div>
+                    </div>
+
+                    <h6 class="text-primary mb-3 mt-4"><i class="fas fa-tools me-2"></i>Detalles de la Instalación</h6>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Tipo de Orden *</label>
+                            <div>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="tipoOrden" id="tipoInstalacion" value="instalacion" required checked>
+                                    <label class="form-check-label" for="tipoInstalacion">Instalación</label>
+                                </div>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="tipoOrden" id="tipoReconversion" value="reconversion" required>
+                                    <label class="form-check-label" for="tipoReconversion">Reconversión</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="plan" class="form-label">Plan *</label>
+                            <select class="form-select" id="plan" name="plan" required>
+                                <option value="">Seleccione un plan</option>
+                                <option value="GO">GO</option>
+                                <option value="GO PLUS">GO PLUS</option>
+                                <option value="GO PROMO">GO PROMO</option>
+                                <option value="GO 500">GO 500</option>
+                                <option value="GO Empresa">GO Empresa</option>
+                                <option value="GO Emprendedor">GO Emprendedor</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="equipo" class="form-label">Equipo Asignado *</label>
+                            <select class="form-select" id="equipo" name="equipo" required>
+                                <option value="">Seleccione un equipo</option>
+                                <option value="1">Equipo 1</option>
+                                <option value="2">Equipo 2</option>
+                                <option value="3">Equipo 3</option>
+                                <option value="4">Equipo 4</option>
+                                <option value="5">Equipo 5</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="fechaInstalacion" class="form-label">Fecha y Hora de Instalación *</label>
+                            <input type="datetime-local" class="form-control" id="fechaInstalacion" name="fechaInstalacion" required>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end mt-4">
+                        <button type="submit" class="btn btn-success me-2"><i class="fas fa-save me-2"></i>Guardar Orden</button>
+                        <button type="reset" class="btn btn-secondary"><i class="fas fa-redo-alt me-2"></i>Limpiar</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="tab-pane fade" id="orders" role="tabpanel" aria-labelledby="orders-tab">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h4>Órdenes de Instalación Pendientes</h4>
+                </div>
+                <div class="row" id="ordersContainer"></div>
+            </div>
+
+            <div class="tab-pane fade" id="completed" role="tabpanel" aria-labelledby="completed-tab">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h4>Órdenes Completadas</h4>
+                </div>
+                <div class="row mb-5">
+                    <div class="col-md-6 mb-4">
+                        <div class="card h-100">
+                            <div class="card-header">
+                                <h6 class="mb-0">Órdenes Completadas por Zona</h6>
+                            </div>
+                            <div class="card-body d-flex justify-content-center align-items-center">
+                                <canvas id="chartZona"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-4">
+                        <div class="card h-100">
+                            <div class="card-header">
+                                <h6 class="mb-0">Órdenes Completadas por Plan</h6>
+                            </div>
+                            <div class="card-body d-flex justify-content-center align-items-center">
+                                <canvas id="chartPlan"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row" id="completedOrdersContainer"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    <script src="script_firebase.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
