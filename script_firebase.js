@@ -28,6 +28,25 @@ class OrderManager {
         this.chartPlan = null;
         this.checkLogin();
         this.init();
+        this.materialesLista = [
+            { id: 'drop', label: 'Drop', unidad: 'm', type: 'number' },
+            { id: 'conectorFTTH', label: 'Conector FTTH', unidad: 'u', type: 'number' },
+            { id: 'coaxial', label: 'Coaxial', unidad: 'm', type: 'number' },
+            { id: 'conectorRG6', label: 'Conector RG6', unidad: 'u', type: 'number' },
+            { id: 'grampas', label: 'Grampas', unidad: 'u', type: 'number' },
+            { id: 'splitter', label: 'Splitter', unidad: 'u', type: 'number' },
+            { id: 'conectorRJ45', label: 'Conector RJ45', unidad: 'u', type: 'number' },
+            { id: 'fuente', label: 'Fuente', unidad: 'u', type: 'number' },
+            { id: 'router', label: 'Router', unidad: 'u', type: 'number' },
+            { id: 'patchcord', label: 'Patchcord', unidad: 'u', type: 'number' },
+            { id: 'miniNodo', label: 'MiniNodo', unidad: 'u', type: 'number' },
+            { id: 'tornillos', label: 'Tornillos', unidad: 'u', type: 'number' },
+            { id: 'piton', label: 'Pitón', unidad: 'u', type: 'number' },
+            { id: 'hebilla', label: 'Hebilla', unidad: 'u', type: 'number' },
+            { id: 'preformada', label: 'Preformada', unidad: 'u', type: 'number' },
+            { id: 'botella', label: 'Botella', unidad: 'u', type: 'number' },
+            { id: 'otros', label: 'Otros', unidad: 'Obs.', type: 'text' }
+        ];
     }
 
     checkLogin() {
@@ -208,14 +227,13 @@ class OrderManager {
                             <tr>
                                 <th>Cliente</th>
                                 <th>N° Cliente</th>
-                                <th>Email</th>
                                 <th>Dirección</th>
-                                <th>Ubicación</th>
                                 <th>Zona</th>
                                 <th>Plan</th>
                                 <th>Equipo</th>
                                 <th>Tipo</th>
-                                <th>Descripción</th>
+                                <th>Materiales</th>
+                                <th>Observación</th>
                                 <th>Creado por</th>
                                 <th>Fecha Completado</th>
                             </tr>
@@ -284,6 +302,26 @@ class OrderManager {
         `;
     }
 
+    getMaterialesText(materiales) {
+        if (!materiales) return 'N/A';
+        
+        const usedMaterials = this.materialesLista.filter(m => {
+            const value = materiales[m.id];
+            return (m.type === 'number' && value && value > 0) || (m.id === 'otros' && value && value.trim() !== '');
+        });
+
+        if (usedMaterials.length === 0) return 'Ninguno';
+
+        return usedMaterials.map(m => {
+            const value = materiales[m.id];
+            if (m.type === 'number') {
+                return `<strong>${m.label}</strong>: ${value}${m.unidad}`;
+            } else { // Otros (texto)
+                return `<strong>${m.label}</strong>: ${value}`;
+            }
+        }).join('<br>');
+    }
+
     createCompletedOrderRow(order) {
         const fechaCompletado = toDate(order.fechaCompletado);
         const fechaTxt = fechaCompletado ? fechaCompletado.toLocaleString('es-ES') : '-';
@@ -298,21 +336,21 @@ class OrderManager {
             'otros': 'bg-danger'
         };
         const badgeClass = colors[tipo] || 'bg-secondary';
-
-        const ubicacionLink = order.domicilio?.ubicacion ? `<a href="${order.domicilio.ubicacion}" target="_blank">Ver en Maps</a>` : '-';
+        
+        const materialesHtml = this.getMaterialesText(order.materialesGastados);
+        const observacion = order.materialesGastados?.comentario || order.descripcion || '-';
 
         return `
             <tr>
                 <td>${order.cliente?.nombre || '-'}</td>
                 <td>${order.cliente?.numeroCliente || '-'}</td>
-                <td>${order.cliente?.email || '-'}</td>
                 <td>${order.domicilio?.direccion || '-'} ${order.domicilio?.numero || ''}</td>
-                <td>${ubicacionLink}</td>
                 <td>${order.domicilio?.zona || '-'}</td>
                 <td>${order.instalacion?.plan || '-'}</td>
                 <td>Equipo ${order.instalacion?.equipo || '-'}</td>
-                <td><span class="${badgeClass} px-2 py-1 rounded">${tipo}</span></td>
-                <td>${(order.descripcion || '-').replace(/\n/g, '<br>')}</td>
+                <td><span class="badge ${badgeClass} px-2 py-1">${tipo}</span></td>
+                <td>${materialesHtml}</td>
+                <td>${observacion.replace(/\n/g, '<br>')}</td>
                 <td>${order.creadoPor || '-'}</td>
                 <td>${fechaTxt}</td>
             </tr>
@@ -408,7 +446,8 @@ class OrderManager {
             await db.collection('ordenes').doc(id).update({
                 'instalacion.fecha': firebase.firestore.Timestamp.fromDate(fechaObj),
                 estado: 'pendiente',
-                fechaCompletado: firebase.firestore.FieldValue.delete()
+                fechaCompletado: firebase.firestore.FieldValue.delete(),
+                materialesGastados: firebase.firestore.FieldValue.delete() // Opcional: borrar materiales al reprogramar
             });
             this.showSuccess('Orden reprogramada');
         } catch(err) {
