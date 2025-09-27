@@ -14,9 +14,15 @@ body {
 }
 
 .card-header {
-    background: linear-gradient(135deg, #007bff, #0056b3);
-    color: white;
     border-radius: 10px 10px 0 0 !important;
+    font-weight: 600;
+    padding: 15px 20px;
+}
+
+/* Colores por tipo de orden */
+.bg-purple {
+    background-color: #6f42c1 !important;
+    color: #fff !important;
 }
 
 .order-card {
@@ -29,38 +35,12 @@ body {
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
 }
 
-.order-card .card-header {
-    padding: 15px 20px;
-    font-weight: 600;
-}
-
 .order-card .card-body {
     padding: 20px;
 }
 
 .badge {
     font-size: 0.8rem;
-}
-
-.cliente-info {
-    border-left: 4px solid #007bff;
-    padding-left: 15px;
-    margin-bottom: 15px;
-}
-
-.domicilio-info {
-    border-left: 4px solid #28a745;
-    padding-left: 15px;
-    margin-bottom: 15px;
-}
-
-.instalacion-info {
-    border-left: 4px solid #ffc107;
-    padding-left: 15px;
-}
-
-.btn-action {
-    margin-top: 10px;
 }
 
 .form-label {
@@ -76,6 +56,10 @@ body {
 .nav-tabs .nav-link.active {
     color: #007bff;
     font-weight: 600;
+}
+
+.table thead th {
+    vertical-align: middle;
 }
 
 @media (max-width: 768px) {
