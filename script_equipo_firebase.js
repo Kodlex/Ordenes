@@ -137,3 +137,4 @@ class EquipoPanel {
 window.addEventListener('DOMContentLoaded', () => {
     window.teamPanel = new EquipoPanel();
 });
+
