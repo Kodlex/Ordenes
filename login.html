@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Login - Panel de Equipos</title>
+  <title>Login - Administrador</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
@@ -26,7 +26,7 @@
 </head>
 <body>
   <div class="login-card">
-    <h4 class="text-center mb-4"><i class="fas fa-tools me-2"></i>Login Equipo</h4>
+    <h4 class="text-center mb-4"><i class="fas fa-user-shield me-2"></i>Login Administrador</h4>
     <form id="loginForm">
       <div class="mb-3">
         <label for="username" class="form-label">Usuario</label>
@@ -42,13 +42,12 @@
   </div>
 
   <script>
-    // Usuarios predefinidos (equipoId => {user, pass})
-    const equipos = {
-      "1": {user: "equipo1", pass: "1234"},
-      "2": {user: "equipo2", pass: "1234"},
-      "3": {user: "equipo3", pass: "1234"},
-      "4": {user: "equipo4", pass: "1234"},
-      "5": {user: "equipo5", pass: "1234"}
+    const admins = {
+      "admin1": {user: "admin1", pass: "admin123"},
+      "admin2": {user: "admin2", pass: "admin123"},
+      "admin3": {user: "admin3", pass: "admin123"},
+      "admin4": {user: "admin4", pass: "admin123"},
+      "admin5": {user: "admin5", pass: "admin123"}
     };
 
     const loginForm = document.getElementById('loginForm');
@@ -59,12 +58,12 @@
       const username = document.getElementById('username').value.trim();
       const password = document.getElementById('password').value.trim();
 
-      const equipoId = Object.keys(equipos).find(id => equipos[id].user === username && equipos[id].pass === password);
+      const isAdmin = Object.keys(admins).find(id => admins[id].user === username && admins[id].pass === password);
 
-      if (equipoId) {
-        localStorage.setItem('userType', 'equipo');
-        localStorage.setItem('equipoId', equipoId);
-        window.location.href = 'equipo_panel.html';
+      if (isAdmin) {
+        localStorage.setItem('userType', 'admin');
+        localStorage.setItem('userName', username);
+        window.location.href = 'index.html';
       } else {
         loginError.style.display = 'block';
       }
