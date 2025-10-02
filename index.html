@@ -37,9 +37,13 @@
                     <i class="fas fa-check-circle me-2"></i>Completadas
                 </button>
             </li>
-        </ul>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="materials-tab" data-bs-toggle="tab" data-bs-target="#materials" type="button" role="tab" aria-controls="materials" aria-selected="false">
+                    <i class="fas fa-warehouse me-2"></i>Inventario
+                </button>
+            </li>
+            </ul>
         <div class="tab-content mt-3">
-            <!-- FORM -->
             <div class="tab-pane fade show active" id="form" role="tabpanel" aria-labelledby="form-tab">
                 <form id="orderForm" class="p-4 border rounded shadow-sm">
                     <h5 class="text-primary mb-4"><i class="fas fa-file-invoice me-2"></i>Datos de la Orden</h5>
@@ -152,7 +156,6 @@
                 </form>
             </div>
 
-            <!-- PENDIENTES -->
             <div class="tab-pane fade" id="orders" role="tabpanel" aria-labelledby="orders-tab">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h4>Órdenes de Instalación Pendientes</h4>
@@ -160,7 +163,6 @@
                 <div class="row" id="ordersContainer"></div>
             </div>
 
-            <!-- COMPLETADAS -->
             <div class="tab-pane fade" id="completed" role="tabpanel" aria-labelledby="completed-tab">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h4>Órdenes Completadas</h4>
@@ -189,10 +191,45 @@
                 </div>
                 <div id="completedOrdersContainer"></div>
             </div>
-        </div>
+            
+            <div class="tab-pane fade" id="materials" role="tabpanel" aria-labelledby="materials-tab">
+                <h4 class="mb-4">Consumo de Materiales</h4>
+                
+                <div class="p-4 border rounded shadow-sm mb-4">
+                    <h5 class="text-primary mb-3"><i class="fas fa-filter me-2"></i>Filtros de Consumo</h5>
+                    <form id="materialFilterForm" class="row g-3 needs-validation" novalidate>
+                        <div class="col-md-5">
+                            <label for="filterMonth" class="form-label">Mes *</label>
+                            <input type="month" class="form-control" id="filterMonth" required>
+                            <div class="invalid-feedback">Selecciona un mes.</div>
+                        </div>
+                        <div class="col-md-5">
+                            <label for="filterEquipo" class="form-label">Equipo (Opcional)</label>
+                            <select class="form-select" id="filterEquipo" name="filterEquipo">
+                                <option value="">Todos los Equipos</option>
+                                <option value="1">Equipo 1</option>
+                                <option value="2">Equipo 2</option>
+                                <option value="3">Equipo 3</option>
+                                <option value="4">Equipo 4</option>
+                                <option value="5">Equipo 5</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2 d-flex align-items-end">
+                            <button type="submit" class="btn btn-primary w-100"><i class="fas fa-search me-2"></i>Buscar</button>
+                        </div>
+                    </form>
+                </div>
+
+                <div id="materialSummaryContainer">
+                    <div class="col-12 text-center text-muted py-5">
+                        <i class="fas fa-search fa-3x mb-3"></i>
+                        <h5>Selecciona un mes y equipo (opcional) para ver el resumen de materiales gastados.</h5>
+                    </div>
+                </div>
+            </div>
+            </div>
     </div>
 
-    <!-- Firebase + App scripts -->
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
     <script src="script_firebase.js"></script>
@@ -218,7 +255,24 @@
             });
           }
         });
+        
+        // Habilita validación de Bootstrap en formularios (añadido para los nuevos formularios)
+        (function () {
+          'use strict'
+          var forms = document.querySelectorAll('.needs-validation')
+          Array.prototype.slice.call(forms)
+            .forEach(function (form) {
+              form.addEventListener('submit', function (event) {
+                if (!form.checkValidity()) {
+                  event.preventDefault()
+                  event.stopPropagation()
+                }
+                form.classList.add('was-validated')
+              }, false)
+            })
+        })()
     </script>
 </body>
 </html>
+
 
