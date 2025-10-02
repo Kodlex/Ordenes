@@ -62,6 +62,8 @@ class OrderManager {
     init(){
         document.getElementById('orderForm').addEventListener('submit', (e) => this.handleFormSubmit(e));
         document.getElementById('logoutBtn').addEventListener('click', this.logout);
+        // NUEVO: Escuchar el evento de envío del formulario de filtros de materiales
+        document.getElementById('materialFilterForm')?.addEventListener('submit', (e) => this.handleMaterialFilterSubmit(e));
 
         const navTabs = document.getElementById('myTab');
         if (navTabs) {
@@ -72,6 +74,9 @@ class OrderManager {
                     this.loadPendingRealtime();
                 } else if (targetId === 'completed') {
                     this.loadCompletedRealtime();
+                // NUEVO: Cargar setup al cambiar a la pestaña de materiales
+                } else if (targetId === 'materials') {
+                    this.setupMaterialTab();
                 }
             });
         }
@@ -82,6 +87,9 @@ class OrderManager {
             this.loadPendingRealtime();
         } else if (activeTabId === 'completed') {
             this.loadCompletedRealtime();
+        // NUEVO: Cargar setup al inicio si la pestaña es la de materiales
+        } else if (activeTabId === 'materials') {
+            this.setupMaterialTab();
         }
     }
 
@@ -464,10 +472,211 @@ class OrderManager {
         document.body.appendChild(alert);
         setTimeout(()=>{ if(alert.parentNode) alert.remove(); }, 3000);
     }
+    
+    // --- NUEVAS FUNCIONES PARA EL REPORTE DE MATERIALES ---
+    
+    // Prepara la pestaña de materiales (establece el mes actual por defecto)
+    setupMaterialTab() {
+        const filterMonth = document.getElementById('filterMonth');
+        if (!filterMonth.value) {
+            const now = new Date();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const year = now.getFullYear();
+            filterMonth.value = `${year}-${month}`;
+        }
+    }
+
+    // Maneja el envío del formulario de filtros de materiales
+    async handleMaterialFilterSubmit(e) {
+        e.preventDefault();
+        const form = e.target;
+        form.classList.add('was-validated');
+        if (!form.checkValidity()) return;
+
+        const container = document.getElementById('materialSummaryContainer');
+        const monthInput = document.getElementById('filterMonth').value;
+        const equipo = document.getElementById('filterEquipo').value;
+
+        const [year, month] = monthInput.split('-');
+        const startDate = new Date(year, month - 1, 1);
+        const endDate = new Date(year, month, 1);
+        
+        container.innerHTML = `<div class="col-12 text-center text-muted py-5"><i class="fas fa-spinner fa-spin fa-3x mb-3"></i><h5>Cargando órdenes...</h5></div>`;
+
+        try {
+            let q = db.collection('ordenes')
+                .where('estado', '==', 'completado')
+                // Se filtra por fechaCompletado, que contiene el registro de materiales
+                .where('fechaCompletado', '>=', firebase.firestore.Timestamp.fromDate(startDate))
+                .where('fechaCompletado', '<', firebase.firestore.Timestamp.fromDate(endDate))
+                .orderBy('fechaCompletado', 'desc');
+
+            const snapshot = await q.get();
+            const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+
+            this.processMaterialData(docs, equipo, container);
+
+        } catch (err) {
+            console.error('Error cargando datos de materiales:', err);
+            container.innerHTML = `<div class="col-12 text-danger text-center py-5">Error cargando datos. Revisa consola.</div>`;
+        }
+    }
+
+    // Procesa y muestra los datos de materiales
+    processMaterialData(docs, filterEquipo, container) {
+        let filteredDocs = docs;
+        if (filterEquipo) {
+            // Aplica el filtro por equipo
+            filteredDocs = docs.filter(doc => doc.instalacion?.equipo === filterEquipo);
+        }
+
+        if (filteredDocs.length === 0) {
+            container.innerHTML = `<div class="col-12 text-center text-muted py-5"><i class="fas fa-box-open fa-3x mb-3"></i><h5>No se encontraron órdenes completadas con esos filtros.</h5></div>`;
+            return;
+        }
+
+        const materialSummary = {};
+        
+        // 1. Inicializar el resumen con 0 para todos los materiales numéricos
+        this.materialesLista.filter(m => m.type === 'number').forEach(m => {
+            materialSummary[m.id] = { label: m.label, unidad: m.unidad, total: 0 };
+        });
+
+        const observacionesOtros = [];
+
+        // 2. Sumar materiales y recolectar observaciones
+        filteredDocs.forEach(order => {
+            const materiales = order.materialesGastados;
+            if (materiales) {
+                // Sumar materiales numéricos
+                this.materialesLista.filter(m => m.type === 'number').forEach(m => {
+                    const value = parseFloat(materiales[m.id]) || 0;
+                    if (value > 0) {
+                        materialSummary[m.id].total += value;
+                    }
+                });
+                
+                // Recolectar observaciones 'otros' y comentarios generales
+                const otrosMateriales = materiales.otros;
+                const comentario = materiales.comentario;
+                
+                if (otrosMateriales && typeof otrosMateriales === 'string' && otrosMateriales.trim() !== '') {
+                    observacionesOtros.push({
+                        ordenId: order.id.substr(-6), 
+                        equipo: order.instalacion?.equipo,
+                        cliente: order.cliente?.nombre,
+                        observacion: `(OTROS): ${otrosMateriales}${comentario && comentario.trim() !== '' ? ` - ${comentario}` : ''}`
+                    });
+                } else if (comentario && comentario.trim() !== '') {
+                    observacionesOtros.push({
+                        ordenId: order.id.substr(-6),
+                        equipo: order.instalacion?.equipo,
+                        cliente: order.cliente?.nombre,
+                        observacion: `(COMENTARIO GENERAL): ${comentario}`
+                    });
+                }
+            }
+        });
+
+        // 3. Crear el HTML de las tablas
+        const summaryRows = Object.values(materialSummary)
+            .filter(m => m.total > 0) // Solo mostrar materiales con un total gastado
+            .map(m => `
+                <tr>
+                    <td><strong>${m.label}</strong></td>
+                    <td class="text-end">${m.total.toFixed(2).replace(/\.00$/, '')}</td>
+                    <td>${m.unidad}</td>
+                </tr>
+            `).join('');
+
+        const summaryTable = `
+            <div class="row">
+                <div class="col-lg-6 mb-4">
+                    <div class="card h-100">
+                        <div class="card-header bg-primary text-white">
+                            <h6 class="mb-0">Resumen de Materiales Gastados</h6>
+                            <p class="small mb-0">Total: ${filteredDocs.length} órdenes completadas en el período${filterEquipo ? ` por Equipo ${filterEquipo}` : ''}.</p>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-bordered table-striped">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Material</th>
+                                            <th class="text-end">Cantidad Total</th>
+                                            <th>Unidad</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${summaryRows.length > 0 ? summaryRows : '<tr><td colspan="3" class="text-center text-muted">No se registraron materiales numéricos en las órdenes filtradas.</td></tr>'}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-6 mb-4">
+                    ${this.createOtrosTable(observacionesOtros)}
+                </div>
+            </div>
+        `;
+        container.innerHTML = summaryTable;
+    }
+
+    // Crea la tabla de observaciones "Otros"
+    createOtrosTable(observacionesOtros) {
+        if (observacionesOtros.length === 0) {
+            return `
+                <div class="card h-100">
+                    <div class="card-header bg-info text-white">
+                        <h6 class="mb-0">Detalle de Materiales "Otros" / Observaciones</h6>
+                    </div>
+                    <div class="card-body d-flex align-items-center justify-content-center">
+                        <p class="text-center text-muted m-0">No se registraron detalles de "Otros" o comentarios generales en este período.</p>
+                    </div>
+                </div>
+            `;
+        }
+        
+        const rows = observacionesOtros.map(o => `
+            <tr>
+                <td>#${o.ordenId}</td>
+                <td>Equipo ${o.equipo || '-'}</td>
+                <td>${o.cliente || '-'}</td>
+                <td>${o.observacion}</td>
+            </tr>
+        `).join('');
+
+        return `
+            <div class="card h-100">
+                <div class="card-header bg-info text-white">
+                    <h6 class="mb-0">Detalle de Materiales "Otros" / Observaciones (${observacionesOtros.length} registros)</h6>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                        <table class="table table-sm table-striped table-hover small">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th>Orden</th>
+                                    <th>Equipo</th>
+                                    <th>Cliente</th>
+                                    <th>Detalle</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${rows}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
 }
 
 window.addEventListener('DOMContentLoaded', ()=>{
     window.orderManager = new OrderManager();
 });
+
 
 
