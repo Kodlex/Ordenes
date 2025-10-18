@@ -20,8 +20,62 @@
   </nav>
 
   <div class="container mt-4">
-    <h4>Órdenes asignadas</h4>
-    <div class="row mt-3" id="teamOrdersContainer"></div>
+    
+    <ul class="nav nav-tabs" id="myTab" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="pending-tab" data-bs-toggle="tab" data-bs-target="#pending" type="button" role="tab" aria-controls="pending" aria-selected="true">
+                <i class="fas fa-list-ul me-2"></i>Órdenes Pendientes
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="completed-tab" data-bs-toggle="tab" data-bs-target="#completed" type="button" role="tab" aria-controls="completed" aria-selected="false">
+                <i class="fas fa-history me-2"></i>Historial Completado
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content mt-3">
+        
+        <div class="tab-pane fade show active" id="pending" role="tabpanel" aria-labelledby="pending-tab">
+            <h4>Órdenes asignadas</h4>
+            <div class="row mt-3" id="teamOrdersContainer"></div>
+        </div>
+        
+        <div class="tab-pane fade" id="completed" role="tabpanel" aria-labelledby="completed-tab">
+            <h4>Registro Histórico de Órdenes Completadas</h4>
+            
+            <div class="row mb-4 p-3 border rounded bg-light mt-3">
+                <div class="col-md-4 mb-3">
+                    <label for="filterTipoOrden" class="form-label fw-bold small">Filtrar por Tipo de Orden</label>
+                    <select class="form-select form-select-sm" id="filterTipoOrden">
+                        <option value="todos" selected>Todos los Tipos</option>
+                        <option value="instalacion">Instalación</option>
+                        <option value="mudanza">Mudanza</option>
+                        <option value="reconversion">Reconversión</option>
+                        <option value="extension">Extensión</option>
+                        <option value="presupuesto">Presupuesto</option>
+                        <option value="otros">Otros</option>
+                    </select>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label for="filterDateStart" class="form-label fw-bold small">Fecha de Inicio (Completado)</label>
+                    <input type="date" class="form-control form-control-sm" id="filterDateStart">
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label for="filterDateEnd" class="form-label fw-bold small">Fecha de Fin (Completado)</label>
+                    <input type="date" class="form-control form-control-sm" id="filterDateEnd">
+                </div>
+            </div>
+
+            <div id="completedOrdersContainer">
+                <div class="col-12 text-center text-muted py-5">
+                    <h5>Seleccione un rango de fecha o navegue a esta pestaña para cargar el historial.</h5>
+                </div>
+            </div>
+        </div>
+        
+    </div>
+
   </div>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -29,4 +83,3 @@
   <script src="script_equipo_firebase.js"></script>
 </body>
 </html>
-
