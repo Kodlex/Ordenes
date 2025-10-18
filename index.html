@@ -37,11 +37,6 @@
                     <i class="fas fa-check-circle me-2"></i>Completadas
                 </button>
             </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="materials-tab" data-bs-toggle="tab" data-bs-target="#materials" type="button" role="tab" aria-controls="materials" aria-selected="false">
-                    <i class="fas fa-warehouse me-2"></i>Inventario
-                </button>
-            </li>
             </ul>
         <div class="tab-content mt-3">
             <div class="tab-pane fade show active" id="form" role="tabpanel" aria-labelledby="form-tab">
@@ -189,54 +184,62 @@
                         </div>
                     </div>
                 </div>
+                
+                <div class="row mb-4">
+                    <div class="col-md-4 mb-3">
+                        <label for="filterEquipo" class="form-label fw-bold">Filtrar por Equipo</label>
+                        <select class="form-select" id="filterEquipo">
+                            <option value="todos" selected>Todos los Equipos</option>
+                            <option value="Equipo 1">Equipo 1</option>
+                            <option value="Equipo 2">Equipo 2</option>
+                            <option value="Equipo 3">Equipo 3</option>
+                            <option value="Equipo 4">Equipo 4</option>
+                            <option value="Equipo 5">Equipo 5</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="filterTipoOrden" class="form-label fw-bold">Filtrar por Tipo de Orden</label>
+                        <select class="form-select" id="filterTipoOrden">
+                            <option value="todos" selected>Todos los Tipos</option>
+                            <option value="instalacion">Instalación</option>
+                            <option value="mudanza">Mudanza</option>
+                            <option value="reconversion">Reconversión</option>
+                            <option value="extension">Extensión</option>
+                            <option value="presupuesto">Presupuesto</option>
+                            <option value="otros">Otros</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="exportPdfBtn" class="form-label fw-bold invisible">Exportar</label>
+                        <button id="exportPdfBtn" class="btn btn-danger w-100"><i class="fas fa-file-pdf me-2"></i>Exportar a PDF</button>
+                    </div>
+                </div>
+                
+                <div class="row mb-4">
+                    <div class="col-md-6 mb-3">
+                        <label for="filterDateStart" class="form-label fw-bold">Fecha de Inicio (Completado)</label>
+                        <input type="date" class="form-control" id="filterDateStart">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="filterDateEnd" class="form-label fw-bold">Fecha de Fin (Completado)</label>
+                        <input type="date" class="form-control" id="filterDateEnd">
+                    </div>
+                </div>
                 <div id="completedOrdersContainer"></div>
             </div>
             
-            <div class="tab-pane fade" id="materials" role="tabpanel" aria-labelledby="materials-tab">
-                <h4 class="mb-4">Consumo de Materiales</h4>
-                
-                <div class="p-4 border rounded shadow-sm mb-4">
-                    <h5 class="text-primary mb-3"><i class="fas fa-filter me-2"></i>Filtros de Consumo</h5>
-                    <form id="materialFilterForm" class="row g-3 needs-validation" novalidate>
-                        <div class="col-md-5">
-                            <label for="filterMonth" class="form-label">Mes *</label>
-                            <input type="month" class="form-control" id="filterMonth" required>
-                            <div class="invalid-feedback">Selecciona un mes.</div>
-                        </div>
-                        <div class="col-md-5">
-                            <label for="filterEquipo" class="form-label">Equipo (Opcional)</label>
-                            <select class="form-select" id="filterEquipo" name="filterEquipo">
-                                <option value="">Todos los Equipos</option>
-                                <option value="1">Equipo 1</option>
-                                <option value="2">Equipo 2</option>
-                                <option value="3">Equipo 3</option>
-                                <option value="4">Equipo 4</option>
-                                <option value="5">Equipo 5</option>
-                            </select>
-                        </div>
-                        <div class="col-md-2 d-flex align-items-end">
-                            <button type="submit" class="btn btn-primary w-100"><i class="fas fa-search me-2"></i>Buscar</button>
-                        </div>
-                    </form>
-                </div>
-
-                <div id="materialSummaryContainer">
-                    <div class="col-12 text-center text-muted py-5">
-                        <i class="fas fa-search fa-3x mb-3"></i>
-                        <h5>Selecciona un mes y equipo (opcional) para ver el resumen de materiales gastados.</h5>
-                    </div>
-                </div>
-            </div>
             </div>
     </div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
     <script src="script_firebase.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
-        // muestra/oculta el detalle 'Otros'
+        // ... (Tu código de validación y ocultar/mostrar detalle 'Otros' aquí) ...
         document.addEventListener('DOMContentLoaded', () => {
           const tipoOrdenSelect = document.getElementById('tipoOrden');
           const detalleOtrosContainer = document.getElementById('detalleOtrosContainer');
@@ -256,7 +259,7 @@
           }
         });
         
-        // Habilita validación de Bootstrap en formularios (añadido para los nuevos formularios)
+        // Habilita validación de Bootstrap en formularios
         (function () {
           'use strict'
           var forms = document.querySelectorAll('.needs-validation')
@@ -274,5 +277,4 @@
     </script>
 </body>
 </html>
-
 
