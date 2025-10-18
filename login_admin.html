@@ -47,7 +47,9 @@
       "admin2": {user: "admin2", pass: "admin123"},
       "admin3": {user: "admin3", pass: "admin123"},
       "admin4": {user: "admin4", pass: "admin123"},
-      "admin5": {user: "admin5", pass: "admin123"}
+      "admin5": {user: "admin5", pass: "admin123"},
+      // Usuario exclusivo para el panel de stock:
+      "material_manager": {user: "material_manager", pass: "stock123"} 
     };
 
     const loginForm = document.getElementById('loginForm');
@@ -61,9 +63,17 @@
       const isAdmin = Object.keys(admins).find(id => admins[id].user === username && admins[id].pass === password);
 
       if (isAdmin) {
+        loginError.style.display = 'none';
         localStorage.setItem('userType', 'admin');
         localStorage.setItem('userName', username);
-        window.location.href = 'index.html';
+        
+        // ** REDIRECCIÓN CONDICIONAL **
+        if (username === 'material_manager') {
+            window.location.href = 'stock_panel.html';
+        } else {
+            window.location.href = 'index.html';
+        }
+
       } else {
         loginError.style.display = 'block';
       }
