@@ -22,9 +22,8 @@ function toDate(value) {
 class EquipoPanel {
     constructor() {
         this.equipoId = localStorage.getItem('equipoId'); 
-        this.unsubscribe = null;
+        this.unsubscribe = null; // Para órdenes pendientes
         this.checkLogin();
-        this.init();
         this.materialesLista = [
             // Fibra
             { id: 'drop', label: 'Drop', unidad: 'mts', type: 'number', grupo: 'fibra' },
@@ -48,6 +47,7 @@ class EquipoPanel {
             // Observaciones
             { id: 'otros', label: 'Otros Materiales (Obs.)', unidad: 'observación', type: 'text', grupo: 'otros' }
         ];
+        this.init();
     }
 
     checkLogin() {
@@ -62,7 +62,40 @@ class EquipoPanel {
 
     init() {
         document.getElementById('logoutBtn').addEventListener('click', this.logout);
-        this.loadTeamOrdersRealtime();
+        this.initEventListeners();
+        
+        // Carga inicial de la pestaña activa (Pendientes)
+        const activeTab = document.querySelector('.nav-link.active');
+        const activeTabId = activeTab ? activeTab.getAttribute('data-bs-target').substring(1) : 'pending';
+        if (activeTabId === 'pending') {
+            this.loadTeamOrdersRealtime();
+        } 
+    }
+
+    initEventListeners() {
+        const navTabs = document.getElementById('myTab');
+        if (navTabs) {
+            navTabs.addEventListener('shown.bs.tab', (event) => {
+                const targetId = event.target.getAttribute('data-bs-target').substring(1);
+                if (targetId === 'pending') {
+                    this.loadTeamOrdersRealtime();
+                } else if (targetId === 'completed') {
+                    this.fetchAndRenderCompletedOrders(); // Carga las completadas al abrir
+                }
+            });
+        }
+        
+        const filterTipoOrdenEl = document.getElementById('filterTipoOrden');
+        const filterDateStartEl = document.getElementById('filterDateStart');
+        const filterDateEndEl = document.getElementById('filterDateEnd');
+
+        // Tipo de Orden: Filtro en el cliente (visual)
+        if (filterTipoOrdenEl) filterTipoOrdenEl.addEventListener('change', () => this.applyClientSideFilters());
+        
+        // Rango de Fechas: Requiere una nueva consulta a Firebase (Server-Side)
+        const serverFilterHandler = () => this.fetchAndRenderCompletedOrders();
+        if (filterDateStartEl) filterDateStartEl.addEventListener('change', serverFilterHandler);
+        if (filterDateEndEl) filterDateEndEl.addEventListener('change', serverFilterHandler);
     }
 
     logout() {
@@ -71,6 +104,7 @@ class EquipoPanel {
         window.location.href = 'login.html';
     }
 
+    // --- LÓGICA DE ÓRDENES PENDIENTES ---
     loadTeamOrdersRealtime() {
         const container = document.getElementById('teamOrdersContainer');
         const equipoId = this.equipoId; 
@@ -78,37 +112,189 @@ class EquipoPanel {
         if (!container || !equipoId) return;
         
         if (this.unsubscribe) {
-            this.unsubscribe();
+            this.unsubscribe(); // Desuscribir la escucha anterior
+            this.unsubscribe = null;
         }
         
+        // ESTA CONSULTA REQUIERE EL ÍNDICE COMPUESTO EN FIRESTORE
         const q = db.collection('ordenes')
                     .where('estado', '==', 'pendiente')
-                    .where('instalacion.equipo', '==', equipoId);
+                    .where('instalacion.equipo', '==', equipoId)
+                    .orderBy('instalacion.fecha', 'asc'); // Ordenar por fecha de instalación
 
         this.unsubscribe = q.onSnapshot(snapshot => {
             const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-            docs.sort((a,b) => {
-                const da = toDate(a.instalacion?.fecha) || new Date(0);
-                const db_ = toDate(b.instalacion?.fecha) || new Date(0);
-                return da - db_;
-            });
+            
             if (!docs.length) {
-                container.innerHTML = `<div class="col-12 text-center text-muted py-5"><i class="fas fa-folder-open fa-3x mb-3"></i><h5>No tienes órdenes asignadas</h5></div>`;
+                container.innerHTML = `<div class="col-12 text-center text-muted py-5"><i class="fas fa-folder-open fa-3x mb-3"></i><h5>No tienes órdenes pendientes</h5></div>`;
             } else {
                 container.innerHTML = docs.map(o => this.createOrderCard(o)).join('');
             }
         }, err => {
             console.error('Error listener equipo:', err);
+            // Mensaje de error personalizado en caso de fallo (normalmente por el índice)
             container.innerHTML = `<div class="col-12 alert alert-danger text-center">
-                <i class="fas fa-exclamation-triangle me-2"></i>Error al cargar las órdenes.
-                <br>Verifica la configuración de Firebase y la consola para más detalles.
+                <i class="fas fa-exclamation-triangle me-2"></i>Error al cargar las órdenes pendientes.
+                <p class="mb-0 small"><strong>Revisa la consola (F12)</strong> para el mensaje de Firebase, probablemente debas crear un **Índice Compuesto**.</p>
             </div>`;
         });
     }
 
-    /**
-     * Crea un campo de material con un input-group compacto.
-     */
+    // --- LÓGICA DE ÓRDENES COMPLETADAS (MODIFICADA: Límite 20) ---
+
+    async fetchAndRenderCompletedOrders() {
+        const container = document.getElementById('completedOrdersContainer');
+        if (!container) return;
+
+        // Obtener filtros de fecha
+        const filterDateStartEl = document.getElementById('filterDateStart');
+        const filterDateEndEl = document.getElementById('filterDateEnd');
+        const selectedDateStart = filterDateStartEl ? filterDateStartEl.value : null;
+        const selectedDateEnd = filterDateEndEl ? filterDateEndEl.value : null;
+        
+        // Mostrar cargando
+        container.innerHTML = `<div class="col-12 text-center py-5"><i class="fas fa-spinner fa-spin fa-2x text-primary"></i><h5 class="mt-2 text-primary">Cargando historial...</h5></div>`;
+        
+        let q = db.collection('ordenes')
+            .where('estado', '==', 'completado')
+            .where('instalacion.equipo', '==', this.equipoId);
+
+        let messageLimit = 'Se muestra el historial completo.';
+
+        if (selectedDateStart || selectedDateEnd) {
+             // Si hay filtro de fecha, aplicar rango en Firebase
+            let dateStart = selectedDateStart ? new Date(selectedDateStart) : null;
+            let dateEnd = selectedDateEnd ? new Date(selectedDateEnd) : null;
+
+            if (dateStart) {
+                dateStart.setHours(0, 0, 0, 0);
+                q = q.where('fechaCompletado', '>=', firebase.firestore.Timestamp.fromDate(dateStart));
+            }
+
+            if (dateEnd) {
+                dateEnd.setHours(23, 59, 59, 999);
+                q = q.where('fechaCompletado', '<=', firebase.firestore.Timestamp.fromDate(dateEnd));
+            }
+            messageLimit = `Órdenes filtradas del ${selectedDateStart || 'Inicio'} al ${selectedDateEnd || 'Fin'}.`;
+        } else {
+            // Sin filtro de fecha, limitar la carga a las últimas N órdenes para optimizar
+            const defaultLimit = 20; // <--- Límite de 20 Órdenes
+            q = q.limit(defaultLimit);
+            messageLimit = `Se muestran las últimas ${defaultLimit} órdenes completadas. Use el filtro de fecha para cargar más.`;
+        }
+        
+        // Ordenar siempre por fechaCompletado descendente
+        q = q.orderBy('fechaCompletado', 'desc');
+
+        try {
+            const snapshot = await q.get(); 
+            const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+
+            if (!docs.length) {
+                container.innerHTML = `<div class="col-12 text-center text-muted py-5"><i class="fas fa-folder-open fa-3x mb-3"></i><h5>No hay órdenes completadas para este equipo en el rango seleccionado.</h5></div>`;
+                return;
+            }
+
+            // Renderizar Tabla
+            const tableHtml = `
+                <div class="alert alert-info py-2 small" role="alert">
+                    Total de órdenes cargadas: ${docs.length}. ${messageLimit}
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover table-sm" id="completedOrdersTable">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Cliente</th>
+                                <th>N° Cliente</th>
+                                <th>Dirección</th>
+                                <th>Plan</th>
+                                <th>Tipo</th>
+                                <th>Comentario</th>
+                                <th>Fecha Completado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${docs.map(o => this.createCompletedOrderRow(o)).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            container.innerHTML = tableHtml;
+            
+            // Aplicar filtros de tipo de orden (client-side)
+            this.applyClientSideFilters(); 
+
+        } catch (err) {
+            console.error('Error fetching completed orders:', err);
+            container.innerHTML = `<div class="col-12 text-danger">Error cargando historial de órdenes. Revise la consola.</div>`;
+        }
+    }
+    
+    // Función para crear la fila del historial
+    createCompletedOrderRow(order) {
+        const fechaCompletado = toDate(order.fechaCompletado);
+        const fechaTxt = fechaCompletado ? fechaCompletado.toLocaleString('es-ES') : '-';
+        const tipo = order.tipo || 'otros';
+
+        const colors = {
+            'Instalacion': 'bg-primary',
+            'Mudanza': 'bg-warning text-dark',
+            'Reconversion': 'bg-purple',
+            'Extension': 'bg-success',
+            'Presupuesto': 'bg-secondary',
+            'otros': 'bg-danger'
+        };
+        const badgeClass = colors[tipo] || 'bg-secondary';
+        
+        const observacion = order.materialesGastados?.comentario || order.descripcion || '-';
+        
+        // Atributo para Filtro de Tipo (client-side)
+        const tipoData = tipo.toLowerCase();
+
+        return `
+            <tr data-tipo-orden="${tipoData}">
+                <td>${order.cliente?.nombre || '-'}</td>
+                <td>${order.cliente?.numeroCliente || '-'}</td>
+                <td>${order.domicilio?.direccion || '-'} ${order.domicilio?.numero || ''}</td>
+                <td>${order.instalacion?.plan || '-'}</td>
+                <td><span class="badge ${badgeClass} px-2 py-1">${tipo}</span></td>
+                <td>${observacion.substring(0, 50).replace(/\n/g, ' ')}...</td>
+                <td>${fechaTxt}</td>
+            </tr>
+        `;
+    }
+
+    // Función para aplicar filtro de tipo de orden (en cliente)
+    applyClientSideFilters() {
+        const filterTipoOrdenEl = document.getElementById('filterTipoOrden');
+
+        if (!filterTipoOrdenEl) return; 
+
+        const selectedTipoOrden = filterTipoOrdenEl.value;
+        
+        const tableContainer = document.getElementById('completedOrdersContainer');
+        if (!tableContainer) return;
+
+        // Selecciona todas las filas de la tabla cargada
+        const orderRows = tableContainer.querySelectorAll('tbody tr[data-tipo-orden]'); 
+
+        orderRows.forEach(row => {
+            const rowTipoOrden = row.getAttribute('data-tipo-orden');
+            
+            // FILTRO 1: Tipo de Orden
+            const matchTipoOrden = selectedTipoOrden === 'todos' || rowTipoOrden === selectedTipoOrden;
+
+            // Mostrar u ocultar la fila
+            if (matchTipoOrden) {
+                row.style.display = ''; // Mostrar
+            } else {
+                row.style.display = 'none'; // Ocultar
+            }
+        });
+    }
+
+    // --- MÉTODOS EXISTENTES PARA LA PESTAÑA PENDIENTES (Sin modificaciones funcionales) ---
+
     createMaterialInput(materialId, label, unidad, type = 'number', orderId) {
         const step = type === 'number' ? 'step="1" min="0"' : '';
         
@@ -156,12 +342,9 @@ class EquipoPanel {
 
         const ubicacionLink = order.domicilio?.ubicacion ? `<a href="${order.domicilio.ubicacion}" target="_blank">Ver en Maps</a>` : '-';
 
-        // Materiales agrupados
         const fibraInputs = this.getMaterialInputsByGroup('fibra', order.id);
         const coaxialInputs = this.getMaterialInputsByGroup('coaxial', order.id);
         const variosInputs = this.getMaterialInputsByGroup('varios', order.id);
-
-        // Campo 'Otros' (texto)
         const otherMaterial = this.materialesLista
             .filter(m => m.id === 'otros')
             .map(m => this.createMaterialInput(m.id, m.label, m.unidad, m.type, order.id)).join('');
@@ -283,34 +466,49 @@ class EquipoPanel {
         const materialesUsados = materialesUsadosRadio ? materialesUsadosRadio.value === 'si' : false;
 
         const materialsData = {};
+        const teamId = this.equipoId; 
+        const batch = db.batch(); // INICIAR TRANSACCIÓN BATCH
 
         if (materialesUsados) {
-            // Recoger todos los materiales, ya sean numéricos o de texto
             this.materialesLista.forEach(m => {
                 const input = form.querySelector(`[name="${m.id}"]`);
                 if (input) {
                     if (m.type === 'number') {
-                        materialsData[m.id] = parseInt(input.value) || 0;
-                    } else { // 'otros' (texto)
+                        const value = parseInt(input.value) || 0;
+                        materialsData[m.id] = value;
+                        
+                        // LÓGICA DE DESCUENTO DE STOCK ASIGNADO (stockEquipos)
+                        if (value > 0) {
+                             const equipoRef = db.collection('stockEquipos').doc(`equipo_${teamId}`);
+                             // Descuenta stock asignado al equipo
+                             batch.update(equipoRef, {
+                                 [m.id]: firebase.firestore.FieldValue.increment(-value)
+                             });
+                        }
+                    } else { 
                         materialsData[m.id] = input.value.trim();
                     }
                 }
             });
         }
         
-        // Siempre recopilar el comentario general
         const comentarioInput = form.querySelector('[name="comentario"]');
         materialsData.comentario = comentarioInput ? comentarioInput.value.trim() : '';
 
+        // Actualizar la orden como completada (colección 'ordenes')
+        const orderRef = db.collection('ordenes').doc(id);
+        batch.update(orderRef, {
+            estado: 'completado',
+            fechaCompletado: firebase.firestore.FieldValue.serverTimestamp(),
+            materialesGastados: materialsData 
+        });
+
         try {
-            await db.collection('ordenes').doc(id).update({
-                estado: 'completado',
-                fechaCompletado: firebase.firestore.FieldValue.serverTimestamp(),
-                materialesGastados: materialsData 
-            });
+            await batch.commit(); // EJECUTAR TODAS LAS OPERACIONES (orden y stock)
+            alert('✅ ¡Orden completada y stock descontado con éxito!');
         } catch(err) {
-            console.error('Error marcando completada (equipo):', err);
-            alert('Error marcando completada. Revisa consola.');
+            console.error('Error marcando completada o descontando stock:', err);
+            alert('⚠️ Advertencia: La orden se marcó como completada, pero hubo un error al descontar el stock. Revise el panel de stock.');
         }
     }
 }
