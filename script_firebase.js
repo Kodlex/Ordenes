@@ -23,7 +23,6 @@ function toDate(value) {
 class OrderManager {
     constructor(){
         this.unsubscribePending = null;
-        this.unsubscribeCompleted = null;
         this.chartZona = null;
         this.chartPlan = null;
         this.checkLogin();
@@ -62,9 +61,9 @@ class OrderManager {
     init(){
         document.getElementById('orderForm').addEventListener('submit', (e) => this.handleFormSubmit(e));
         document.getElementById('logoutBtn').addEventListener('click', this.logout);
-        // NUEVO: Escuchar el evento de envío del formulario de filtros de materiales
-        document.getElementById('materialFilterForm')?.addEventListener('submit', (e) => this.handleMaterialFilterSubmit(e));
-
+        
+        this.initCompletedOrdersFilterListeners(); // Inicializar los listeners
+        
         const navTabs = document.getElementById('myTab');
         if (navTabs) {
             navTabs.addEventListener('shown.bs.tab', (event) => {
@@ -73,11 +72,11 @@ class OrderManager {
                 if (targetId === 'orders') {
                     this.loadPendingRealtime();
                 } else if (targetId === 'completed') {
-                    this.loadCompletedRealtime();
-                // NUEVO: Cargar setup al cambiar a la pestaña de materiales
-                } else if (targetId === 'materials') {
-                    this.setupMaterialTab();
-                }
+                    this.fetchAndRenderCompletedOrders(); // Llama a la nueva función de carga
+                } 
+                // else if (targetId === 'materials') {
+                //     this.setupMaterialTab(); // Asumiendo que esta función existe en tu código real
+                // }
             });
         }
 
@@ -86,11 +85,11 @@ class OrderManager {
         if (activeTabId === 'orders') {
             this.loadPendingRealtime();
         } else if (activeTabId === 'completed') {
-            this.loadCompletedRealtime();
-        // NUEVO: Cargar setup al inicio si la pestaña es la de materiales
-        } else if (activeTabId === 'materials') {
-            this.setupMaterialTab();
-        }
+            this.fetchAndRenderCompletedOrders(); // Llama a la nueva función de carga al iniciar
+        } 
+        // else if (activeTabId === 'materials') {
+        //     this.setupMaterialTab();
+        // }
     }
 
     logout() {
@@ -104,10 +103,6 @@ class OrderManager {
             this.unsubscribePending();
             this.unsubscribePending = null;
         }
-        if (this.unsubscribeCompleted) {
-            this.unsubscribeCompleted();
-            this.unsubscribeCompleted = null;
-        }
         if (this.chartZona) {
             try { this.chartZona.destroy(); } catch(e) {}
             this.chartZona = null;
@@ -116,6 +111,7 @@ class OrderManager {
             try { this.chartPlan.destroy(); } catch(e) {}
             this.chartPlan = null;
         }
+        // Se elimina la desuscripción de "completed" porque ahora usa get()
     }
 
     async handleFormSubmit(e){
@@ -188,25 +184,62 @@ class OrderManager {
         });
     }
 
-    loadCompletedRealtime(){
+    /**
+     * **NUEVA FUNCIÓN:** Fetches completed orders from Firestore applying server-side date filtering and limits.
+     */
+    async fetchAndRenderCompletedOrders(){
         const container = document.getElementById('completedOrdersContainer');
         const chartZonaEl = document.getElementById('chartZona');
         const chartPlanEl = document.getElementById('chartPlan');
         if (!container || !chartZonaEl || !chartPlanEl) return;
-
+        
         this.unloadListeners();
-        const q = db.collection('ordenes').where('estado', '==', 'completado');
-        this.unsubscribeCompleted = q.onSnapshot(snapshot => {
+
+        // Obtener elementos de filtro de fecha
+        const filterDateStartEl = document.getElementById('filterDateStart');
+        const filterDateEndEl = document.getElementById('filterDateEnd');
+        const selectedDateStart = filterDateStartEl.value;
+        const selectedDateEnd = filterDateEndEl.value;
+        
+        container.innerHTML = `<div class="col-12 text-center py-5"><i class="fas fa-spinner fa-spin fa-2x text-primary"></i><h5 class="mt-2 text-primary">Cargando órdenes...</h5></div>`;
+        
+        let q = db.collection('ordenes').where('estado', '==', 'completado');
+
+        let dateStart = null;
+        let dateEnd = null;
+        
+        let messageLimit = 'Se muestra el historial completo.';
+
+        if (selectedDateStart) {
+            dateStart = new Date(selectedDateStart);
+            dateStart.setHours(0, 0, 0, 0);
+            q = q.where('fechaCompletado', '>=', firebase.firestore.Timestamp.fromDate(dateStart));
+        }
+
+        if (selectedDateEnd) {
+            dateEnd = new Date(selectedDateEnd);
+            dateEnd.setHours(23, 59, 59, 999);
+            // Firebase requiere que los filtros de rango (<, <=, >, >=) sean sobre el mismo campo que la ordenación.
+            q = q.where('fechaCompletado', '<=', firebase.firestore.Timestamp.fromDate(dateEnd));
+        }
+
+        // 1. Ordenar siempre por fechaCompletado desc (requerido para los filtros de rango)
+        q = q.orderBy('fechaCompletado', 'desc');
+
+        // 2. Límite de carga por defecto si no hay filtro de fecha
+        if (!selectedDateStart && !selectedDateEnd) {
+             // Limitar la carga a un número razonable si no hay filtro de fecha
+            const defaultLimit = 200; 
+            q = q.limit(defaultLimit);
+            messageLimit = `Se muestran las últimas ${defaultLimit} órdenes. Use el filtro de fecha para cargar más.`;
+        }
+
+        try {
+            const snapshot = await q.get(); // Usar get() en lugar de onSnapshot
             const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-            // ordenar por fechaCompletado desc
-            docs.sort((a,b) => {
-                const da = toDate(a.fechaCompletado) || toDate(a.instalacion?.fecha) || new Date(0);
-                const db_ = toDate(b.fechaCompletado) || toDate(b.instalacion?.fecha) || new Date(0);
-                return db_ - da;
-            });
 
             if (!docs.length) {
-                container.innerHTML = `<div class="col-12 text-center text-muted py-5"><i class="fas fa-folder-open fa-3x mb-3"></i><h5>No hay órdenes completadas</h5></div>`;
+                container.innerHTML = `<div class="col-12 text-center text-muted py-5"><i class="fas fa-folder-open fa-3x mb-3"></i><h5>No hay órdenes completadas.</h5><p class="small">${messageLimit}</p></div>`;
                 chartZonaEl.style.display = 'none';
                 chartPlanEl.style.display = 'none';
                 return;
@@ -215,22 +248,16 @@ class OrderManager {
             chartZonaEl.style.display = 'block';
             chartPlanEl.style.display = 'block';
 
-            // métricas
-            const metrics = { porZona: {}, porPlan: {} };
-            docs.forEach(order => {
-                const zona = order.domicilio?.zona || 'Sin Zona';
-                metrics.porZona[zona] = (metrics.porZona[zona] || 0) + 1;
-                const plan = order.instalacion?.plan || 'Sin Plan';
-                metrics.porPlan[plan] = (metrics.porPlan[plan] || 0) + 1;
-            });
+            // 3. Métricas y Gráficos (se basan en los documentos cargados y filtrados por fecha)
+            this.renderCharts(docs);
 
-            // charts
-            this.renderCharts(metrics);
-
-            // tabla
+            // 4. Renderizar Tabla
             const tableHtml = `
+                <div class="alert alert-info py-2 small" role="alert">
+                    Total de órdenes cargadas: ${docs.length}. ${messageLimit}
+                </div>
                 <div class="table-responsive">
-                    <table class="table table-striped table-hover">
+                    <table class="table table-striped table-hover" id="completedOrdersTable">
                         <thead class="table-dark">
                             <tr>
                                 <th>Cliente</th>
@@ -253,12 +280,16 @@ class OrderManager {
                 </div>
             `;
             container.innerHTML = tableHtml;
+            
+            // 5. Aplicar Filtros Secundarios (Equipo, Tipo) en el Cliente
+            this.applyClientSideFilters(); 
 
-        }, err => {
-            console.error('Error listener completadas:', err);
+        } catch (err) {
+            console.error('Error fetching completed orders:', err);
             container.innerHTML = `<div class="col-12 text-danger">Error cargando órdenes completadas. Ver consola.</div>`;
-        });
+        }
     }
+
 
     createOrderCard(order) {
         const fechaInst = toDate(order.instalacion?.fecha);
@@ -347,15 +378,22 @@ class OrderManager {
         
         const materialesHtml = this.getMaterialesText(order.materialesGastados);
         const observacion = order.materialesGastados?.comentario || order.descripcion || '-';
+        
+        // Atributos de Filtrado
+        const equipoData = `Equipo ${order.instalacion?.equipo || '-'}`;
+        const tipoData = tipo.toLowerCase();
+        
+        // Atributo de fecha no se necesita para el filtro en el cliente, pero lo mantenemos por si acaso
+        const fechaData = fechaCompletado ? fechaCompletado.toISOString().split('T')[0] : '';
 
         return `
-            <tr>
+            <tr data-equipo="${equipoData}" data-tipo-orden="${tipoData}" data-fecha="${fechaData}">
                 <td>${order.cliente?.nombre || '-'}</td>
                 <td>${order.cliente?.numeroCliente || '-'}</td>
                 <td>${order.domicilio?.direccion || '-'} ${order.domicilio?.numero || ''}</td>
                 <td>${order.domicilio?.zona || '-'}</td>
                 <td>${order.instalacion?.plan || '-'}</td>
-                <td>Equipo ${order.instalacion?.equipo || '-'}</td>
+                <td>${equipoData}</td>
                 <td><span class="badge ${badgeClass} px-2 py-1">${tipo}</span></td>
                 <td>${materialesHtml}</td>
                 <td>${observacion.replace(/\n/g, '<br>')}</td>
@@ -365,7 +403,7 @@ class OrderManager {
         `;
     }
 
-    renderCharts(metrics) {
+    renderCharts(docs) {
         const dynamicColors = () => {
             const r = Math.floor(Math.random() * 200) + 20;
             const g = Math.floor(Math.random() * 200) + 20;
@@ -378,6 +416,14 @@ class OrderManager {
 
         const zonaCtx = document.getElementById('chartZona').getContext('2d');
         const planCtx = document.getElementById('chartPlan').getContext('2d');
+
+        const metrics = { porZona: {}, porPlan: {} };
+        docs.forEach(order => {
+            const zona = order.domicilio?.zona || 'Sin Zona';
+            metrics.porZona[zona] = (metrics.porZona[zona] || 0) + 1;
+            const plan = order.instalacion?.plan || 'Sin Plan';
+            metrics.porPlan[plan] = (metrics.porPlan[plan] || 0) + 1;
+        });
 
         const zonaLabels = Object.keys(metrics.porZona);
         const zonaData = Object.values(metrics.porZona);
@@ -455,7 +501,7 @@ class OrderManager {
                 'instalacion.fecha': firebase.firestore.Timestamp.fromDate(fechaObj),
                 estado: 'pendiente',
                 fechaCompletado: firebase.firestore.FieldValue.delete(),
-                materialesGastados: firebase.firestore.FieldValue.delete() // Opcional: borrar materiales al reprogramar
+                materialesGastados: firebase.firestore.FieldValue.delete() 
             });
             this.showSuccess('Orden reprogramada');
         } catch(err) {
@@ -473,210 +519,184 @@ class OrderManager {
         setTimeout(()=>{ if(alert.parentNode) alert.remove(); }, 3000);
     }
     
-    // --- NUEVAS FUNCIONES PARA EL REPORTE DE MATERIALES ---
+    // --- FUNCIONES PARA FILTROS DE ÓRDENES COMPLETADAS ---
     
-    // Prepara la pestaña de materiales (establece el mes actual por defecto)
-    setupMaterialTab() {
-        const filterMonth = document.getElementById('filterMonth');
-        if (!filterMonth.value) {
-            const now = new Date();
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const year = now.getFullYear();
-            filterMonth.value = `${year}-${month}`;
-        }
-    }
+    /**
+     * Inicializa los listeners de los filtros.
+     */
+    initCompletedOrdersFilterListeners() {
+        const filterEquipo = document.getElementById('filterEquipo');
+        const filterTipoOrden = document.getElementById('filterTipoOrden');
+        const filterDateStart = document.getElementById('filterDateStart');
+        const filterDateEnd = document.getElementById('filterDateEnd');
+        const exportPdfBtn = document.getElementById('exportPdfBtn');
 
-    // Maneja el envío del formulario de filtros de materiales
-    async handleMaterialFilterSubmit(e) {
-        e.preventDefault();
-        const form = e.target;
-        form.classList.add('was-validated');
-        if (!form.checkValidity()) return;
-
-        const container = document.getElementById('materialSummaryContainer');
-        const monthInput = document.getElementById('filterMonth').value;
-        const equipo = document.getElementById('filterEquipo').value;
-
-        const [year, month] = monthInput.split('-');
-        const startDate = new Date(year, month - 1, 1);
-        const endDate = new Date(year, month, 1);
+        // Los filtros de Equipo y Tipo de Orden ahora solo aplican filtros visuales (client-side)
+        const clientFilterHandler = () => this.applyClientSideFilters();
         
-        container.innerHTML = `<div class="col-12 text-center text-muted py-5"><i class="fas fa-spinner fa-spin fa-3x mb-3"></i><h5>Cargando órdenes...</h5></div>`;
-
-        try {
-            let q = db.collection('ordenes')
-                .where('estado', '==', 'completado')
-                // Se filtra por fechaCompletado, que contiene el registro de materiales
-                .where('fechaCompletado', '>=', firebase.firestore.Timestamp.fromDate(startDate))
-                .where('fechaCompletado', '<', firebase.firestore.Timestamp.fromDate(endDate))
-                .orderBy('fechaCompletado', 'desc');
-
-            const snapshot = await q.get();
-            const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-
-            this.processMaterialData(docs, equipo, container);
-
-        } catch (err) {
-            console.error('Error cargando datos de materiales:', err);
-            container.innerHTML = `<div class="col-12 text-danger text-center py-5">Error cargando datos. Revisa consola.</div>`;
-        }
+        if (filterEquipo) filterEquipo.addEventListener('change', clientFilterHandler);
+        if (filterTipoOrden) filterTipoOrden.addEventListener('change', clientFilterHandler);
+        
+        // Los filtros de fecha llaman a la función de carga para realizar una nueva consulta a Firebase (server-side)
+        const serverFilterHandler = () => this.fetchAndRenderCompletedOrders();
+        if (filterDateStart) filterDateStart.addEventListener('change', serverFilterHandler);
+        if (filterDateEnd) filterDateEnd.addEventListener('change', serverFilterHandler);
+        
+        // LISTENER PARA EL BOTÓN DE EXPORTAR
+        if (exportPdfBtn) exportPdfBtn.addEventListener('click', () => this.exportCompletedOrdersToPDF());
     }
 
-    // Procesa y muestra los datos de materiales
-    processMaterialData(docs, filterEquipo, container) {
-        let filteredDocs = docs;
-        if (filterEquipo) {
-            // Aplica el filtro por equipo
-            filteredDocs = docs.filter(doc => doc.instalacion?.equipo === filterEquipo);
-        }
+    /**
+     * Aplica los filtros de Equipo y Tipo de Orden a las filas visibles de la tabla.
+     * La fecha ya fue filtrada por la consulta a Firebase (Server-Side).
+     */
+    applyClientSideFilters() {
+        const filterEquipoEl = document.getElementById('filterEquipo');
+        const filterTipoOrdenEl = document.getElementById('filterTipoOrden');
 
-        if (filteredDocs.length === 0) {
-            container.innerHTML = `<div class="col-12 text-center text-muted py-5"><i class="fas fa-box-open fa-3x mb-3"></i><h5>No se encontraron órdenes completadas con esos filtros.</h5></div>`;
+        if (!filterEquipoEl || !filterTipoOrdenEl) return; 
+
+        const selectedEquipo = filterEquipoEl.value;
+        const selectedTipoOrden = filterTipoOrdenEl.value;
+        
+        const tableContainer = document.getElementById('completedOrdersContainer');
+        if (!tableContainer) return;
+
+        // Selecciona todas las filas de la tabla cargada
+        const orderRows = tableContainer.querySelectorAll('tbody tr[data-equipo]'); 
+
+        orderRows.forEach(row => {
+            const rowEquipo = row.getAttribute('data-equipo');
+            const rowTipoOrden = row.getAttribute('data-tipo-orden');
+            
+            // FILTRO 1: Equipo
+            const matchEquipo = selectedEquipo === 'todos' || rowEquipo === selectedEquipo;
+            
+            // FILTRO 2: Tipo de Orden
+            const matchTipoOrden = selectedTipoOrden === 'todos' || rowTipoOrden === selectedTipoOrden;
+
+            // Mostrar u ocultar la fila
+            if (matchEquipo && matchTipoOrden) {
+                row.style.display = ''; // Mostrar
+            } else {
+                row.style.display = 'none'; // Ocultar
+            }
+        });
+    }
+    
+    /**
+     * Exporta la tabla de órdenes completadas (solo las filas visibles/filtradas) a un archivo PDF.
+     */
+    exportCompletedOrdersToPDF() {
+        if (typeof window.jspdf === 'undefined' || typeof window.jspdf.jsPDF === 'undefined') {
+            alert('Error: La librería jsPDF no está cargada correctamente. Asegúrate de que las etiquetas <script> estén en index.html');
             return;
         }
 
-        const materialSummary = {};
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF('l', 'mm', 'a4'); // 'l' para horizontal, A4
+
+        const table = document.getElementById('completedOrdersTable');
+        if (!table) {
+            alert('Error: No se encontró la tabla de órdenes completadas. Primero cargue los datos.');
+            return;
+        }
         
-        // 1. Inicializar el resumen con 0 para todos los materiales numéricos
-        this.materialesLista.filter(m => m.type === 'number').forEach(m => {
-            materialSummary[m.id] = { label: m.label, unidad: m.unidad, total: 0 };
-        });
+        // 1. Obtener los datos visibles (filtrados)
+        const head = [];
+        const body = [];
+        
+        // Obtener encabezados
+        const headers = table.querySelectorAll('thead th');
+        headers.forEach(th => head.push(th.textContent.trim()));
 
-        const observacionesOtros = [];
-
-        // 2. Sumar materiales y recolectar observaciones
-        filteredDocs.forEach(order => {
-            const materiales = order.materialesGastados;
-            if (materiales) {
-                // Sumar materiales numéricos
-                this.materialesLista.filter(m => m.type === 'number').forEach(m => {
-                    const value = parseFloat(materiales[m.id]) || 0;
-                    if (value > 0) {
-                        materialSummary[m.id].total += value;
+        // Obtener filas visibles
+        const visibleRows = table.querySelectorAll('tbody tr');
+        visibleRows.forEach(row => {
+            // Solo procesar filas que están visibles (no tienen display: none)
+            if (row.style.display !== 'none') {
+                const rowData = [];
+                row.querySelectorAll('td').forEach((td, index) => {
+                    let textContent = td.textContent.trim();
+                    // Para la columna "Tipo" (índice 6), usar el texto plano del badge
+                    if (index === 6) { 
+                        const badge = td.querySelector('.badge');
+                        textContent = badge ? badge.textContent.trim() : textContent;
                     }
+                    // Para la columna de Materiales (índice 7), reemplazar <br> por salto de línea o coma
+                    if (index === 7) { 
+                         textContent = td.innerHTML.replace(/<br>/g, ', ').replace(/<\/?strong>/g, '');
+                    }
+                    // Para la columna de Observación (índice 8), reemplazar <br> por salto de línea
+                    if (index === 8) {
+                         textContent = td.innerHTML.replace(/<br>/g, ' - ').replace(/<\/?strong>/g, '');
+                    }
+                    
+                    // Limitar el tamaño de la observación para que no desborde (opcional)
+                    if (index === 8 && textContent.length > 50) { 
+                        textContent = textContent.substring(0, 50) + '...';
+                    }
+                    
+                    rowData.push(textContent);
                 });
-                
-                // Recolectar observaciones 'otros' y comentarios generales
-                const otrosMateriales = materiales.otros;
-                const comentario = materiales.comentario;
-                
-                if (otrosMateriales && typeof otrosMateriales === 'string' && otrosMateriales.trim() !== '') {
-                    observacionesOtros.push({
-                        ordenId: order.id.substr(-6), 
-                        equipo: order.instalacion?.equipo,
-                        cliente: order.cliente?.nombre,
-                        observacion: `(OTROS): ${otrosMateriales}${comentario && comentario.trim() !== '' ? ` - ${comentario}` : ''}`
-                    });
-                } else if (comentario && comentario.trim() !== '') {
-                    observacionesOtros.push({
-                        ordenId: order.id.substr(-6),
-                        equipo: order.instalacion?.equipo,
-                        cliente: order.cliente?.nombre,
-                        observacion: `(COMENTARIO GENERAL): ${comentario}`
-                    });
-                }
+                body.push(rowData);
             }
         });
 
-        // 3. Crear el HTML de las tablas
-        const summaryRows = Object.values(materialSummary)
-            .filter(m => m.total > 0) // Solo mostrar materiales con un total gastado
-            .map(m => `
-                <tr>
-                    <td><strong>${m.label}</strong></td>
-                    <td class="text-end">${m.total.toFixed(2).replace(/\.00$/, '')}</td>
-                    <td>${m.unidad}</td>
-                </tr>
-            `).join('');
+        // 2. Encabezado del PDF
+        const filterEquipo = document.getElementById('filterEquipo')?.value;
+        const filterTipoOrden = document.getElementById('filterTipoOrden')?.value;
+        const filterDateStart = document.getElementById('filterDateStart')?.value;
+        const filterDateEnd = document.getElementById('filterDateEnd')?.value;
 
-        const summaryTable = `
-            <div class="row">
-                <div class="col-lg-6 mb-4">
-                    <div class="card h-100">
-                        <div class="card-header bg-primary text-white">
-                            <h6 class="mb-0">Resumen de Materiales Gastados</h6>
-                            <p class="small mb-0">Total: ${filteredDocs.length} órdenes completadas en el período${filterEquipo ? ` por Equipo ${filterEquipo}` : ''}.</p>
-                        </div>
-                        <div class="card-body">
-                            <div class="table-responsive">
-                                <table class="table table-bordered table-striped">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th>Material</th>
-                                            <th class="text-end">Cantidad Total</th>
-                                            <th>Unidad</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        ${summaryRows.length > 0 ? summaryRows : '<tr><td colspan="3" class="text-center text-muted">No se registraron materiales numéricos en las órdenes filtradas.</td></tr>'}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-lg-6 mb-4">
-                    ${this.createOtrosTable(observacionesOtros)}
-                </div>
-            </div>
-        `;
-        container.innerHTML = summaryTable;
-    }
-
-    // Crea la tabla de observaciones "Otros"
-    createOtrosTable(observacionesOtros) {
-        if (observacionesOtros.length === 0) {
-            return `
-                <div class="card h-100">
-                    <div class="card-header bg-info text-white">
-                        <h6 class="mb-0">Detalle de Materiales "Otros" / Observaciones</h6>
-                    </div>
-                    <div class="card-body d-flex align-items-center justify-content-center">
-                        <p class="text-center text-muted m-0">No se registraron detalles de "Otros" o comentarios generales en este período.</p>
-                    </div>
-                </div>
-            `;
-        }
+        const dateRangeText = (filterDateStart || filterDateEnd) 
+            ? `Rango: ${filterDateStart || 'Inicio'} al ${filterDateEnd || 'Fin'}`
+            : 'Últimas 200 órdenes (sin filtro de fecha)';
+            
+        doc.setFontSize(16);
+        doc.text("Reporte de Órdenes Completadas", 148.5, 15, null, null, 'center'); 
         
-        const rows = observacionesOtros.map(o => `
-            <tr>
-                <td>#${o.ordenId}</td>
-                <td>Equipo ${o.equipo || '-'}</td>
-                <td>${o.cliente || '-'}</td>
-                <td>${o.observacion}</td>
-            </tr>
-        `).join('');
+        doc.setFontSize(10);
+        doc.text(`Filtros Aplicados: Equipo: ${filterEquipo}, Tipo: ${filterTipoOrden}, Fecha: ${dateRangeText}`, 148.5, 22, null, null, 'center');
 
-        return `
-            <div class="card h-100">
-                <div class="card-header bg-info text-white">
-                    <h6 class="mb-0">Detalle de Materiales "Otros" / Observaciones (${observacionesOtros.length} registros)</h6>
-                </div>
-                <div class="card-body">
-                    <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
-                        <table class="table table-sm table-striped table-hover small">
-                            <thead class="table-light sticky-top">
-                                <tr>
-                                    <th>Orden</th>
-                                    <th>Equipo</th>
-                                    <th>Cliente</th>
-                                    <th>Detalle</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${rows}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        `;
+        // 3. Configuración y generación de la tabla
+        doc.autoTable({
+            head: [head],
+            body: body,
+            startY: 28, 
+            theme: 'striped',
+            styles: { fontSize: 8, cellPadding: 1, overflow: 'linebreak' },
+            headStyles: { fillColor: [52, 58, 64], textColor: 255, fontStyle: 'bold' }, // table-dark
+            columnStyles: {
+                // Ajustar ancho de columnas para A4 horizontal
+                0: { cellWidth: 30 }, // Cliente
+                1: { cellWidth: 18 }, // N° Cliente
+                2: { cellWidth: 40 }, // Dirección
+                3: { cellWidth: 20 }, // Zona
+                4: { cellWidth: 20 }, // Plan
+                5: { cellWidth: 20 }, // Equipo
+                6: { cellWidth: 20 }, // Tipo
+                7: { cellWidth: 40 }, // Materiales
+                8: { cellWidth: 40 }, // Observación
+                9: { cellWidth: 20 }, // Creado por
+                10: { cellWidth: 25 } // Fecha Completado
+            }
+        });
+
+        const numOrders = body.length;
+        doc.text(`Total de Órdenes en el reporte: ${numOrders}`, 14, doc.internal.pageSize.height - 10);
+        
+        // 4. Guardar el PDF
+        const fileName = `Reporte_Ordenes_Completadas_${filterDateStart || 'Inicio'}_a_${filterDateEnd || 'Fin'}.pdf`;
+        doc.save(fileName);
+        this.showSuccess(`¡${numOrders} órdenes exportadas a PDF con éxito!`);
     }
 }
 
 window.addEventListener('DOMContentLoaded', ()=>{
     window.orderManager = new OrderManager();
 });
+
 
 
 
