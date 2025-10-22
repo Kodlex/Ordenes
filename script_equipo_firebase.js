@@ -5,18 +5,45 @@ const firebaseConfig = {
     projectId: "ordenes-instalacion",
     storageBucket: "ordenes-instalacion.firebasestorage.app",
     messagingSenderId: "424944239546",
-    appId: "1:424944239546:web:b6c783855ae4f3b0799383",
+    appId: "1:424944239546:web:b6c783355ae4f3b0799383",
     measurementId: "G-B2K0XR5D5K"
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-function toDate(value) {
+// MODIFICACIÓN: Se añade un argumento para obtener el formato de fecha deseado.
+function toDate(value, format = 'full') {
     if (!value) return null;
-    if (typeof value.toDate === 'function') return value.toDate();
-    if (value instanceof Date) return value;
-    const d = new Date(value);
-    return isNaN(d) ? null : d;
+    if (typeof value.toDate === 'function') value = value.toDate();
+    if (!(value instanceof Date)) {
+        const d = new Date(value);
+        if (isNaN(d)) return null;
+        value = d;
+    }
+    
+    if (format === 'day_date') {
+        const options = { weekday: 'long' };
+        const dayName = value.toLocaleDateString('es-ES', options);
+        const day = String(value.getDate()).padStart(2, '0');
+        const month = String(value.getMonth() + 1).padStart(2, '0');
+        
+        // Formato: Miércoles 20/10
+        return `${dayName.charAt(0).toUpperCase() + dayName.slice(1)} ${day}/${month}`;
+    }
+    
+    return value; // Retorna el objeto Date por defecto para otros usos
+}
+
+// FUNCIÓN AUXILIAR: Determina si la hora es Mañana o Tarde
+function getSchedule(date) {
+    if (!date || isNaN(date.getTime())) return 'Sin Horario';
+    // Se considera 'Mañana' antes de la 1 PM (13:00) y 'Tarde' de 1 PM en adelante.
+    const hour = date.getHours();
+    if (hour < 13) {
+        return 'Mañana';
+    } else {
+        return 'Tarde';
+    }
 }
 
 class EquipoPanel {
@@ -325,20 +352,29 @@ class EquipoPanel {
             .map(m => this.createMaterialInput(m.id, m.label, m.unidad, m.type, orderId)).join('');
     }
 
+    /**
+     * MODIFICACIÓN CLAVE: Reemplaza la estructura de Card por Accordion.
+     * Muestra el Nombre del Cliente, TIPO DE ORDEN, HORARIO y AHORA LA FECHA como encabezado colapsable.
+     * La barra completa (accordion-header) tiene el color del tipo de orden.
+     */
     createOrderCard(order) {
-        const fechaInst = toDate(order.instalacion?.fecha);
-        const fechaTxt = fechaInst ? fechaInst.toLocaleString('es-ES') : '-';
+        const fechaDate = toDate(order.instalacion?.fecha);
+        const schedule = getSchedule(fechaDate); 
+        const dayDate = fechaDate ? toDate(fechaDate, 'day_date') : 'Sin Fecha'; // <-- NUEVO: Formato Día 00/00
+
         const tipo = order.tipo || 'otros';
 
         const colors = {
-            'Instalacion': 'bg-primary',
-            'Mudanza': 'bg-warning text-dark',
-            'Reconversion': 'bg-purple',
-            'Extension': 'bg-success',
-            'Presupuesto': 'bg-secondary',
-            'otros': 'bg-danger'
+            // Se añaden clases de texto para asegurar la legibilidad
+            'Instalacion': 'bg-primary text-white', 
+            'Mudanza': 'bg-warning text-dark', 
+            'Reconversion': 'bg-purple text-white', 
+            'Extension': 'bg-success text-white',
+            'Presupuesto': 'bg-secondary text-white',
+            'otros': 'bg-danger text-white'
         };
-        const headerClass = colors[tipo] || 'bg-secondary';
+        // badgeClass incluye la clase de fondo y la de texto
+        const badgeClass = colors[tipo] || 'bg-secondary text-white';
 
         const ubicacionLink = order.domicilio?.ubicacion ? `<a href="${order.domicilio.ubicacion}" target="_blank">Ver en Maps</a>` : '-';
 
@@ -350,109 +386,126 @@ class EquipoPanel {
             .map(m => this.createMaterialInput(m.id, m.label, m.unidad, m.type, order.id)).join('');
 
 
+        // ESTRUCTURA HTML CON BARRA DE COLOR COMPLETO, FECHA Y HORARIO
         return `
             <div class="col-md-6 col-lg-4">
-                <div class="card order-card mb-3">
-                    <div class="card-header ${headerClass} d-flex justify-content-between align-items-center">
-                        <span>Orden #${order.id.substr(-6)}</span>
-                        <span class="badge bg-light text-dark">${tipo}</span>
-                    </div>
-                    <div class="card-body">
-                        <h6 class="card-title text-primary">${order.cliente?.nombre || '-'}</h6>
-                        <p class="small text-muted mb-1">Creada por: <strong>${order.creadoPor || '-'}</strong></p>
-                        <p class="small mb-1"><i class="fas fa-id-card me-2"></i>DNI: ${order.cliente?.dni || '-'}</p>
-                        <p class="small mb-1"><strong>N° Cliente:</strong> ${order.cliente?.numeroCliente || '-'}</p>
-                        <p class="small mb-1"><i class="fas fa-phone me-2"></i>Teléfono: ${order.cliente?.telefono || '-'}</p>
-                        <p class="small mb-1"><i class="fas fa-map-marker-alt me-2"></i>${order.domicilio?.direccion || '-'} ${order.domicilio?.numero || ''}</p>
-                        <p class="small mb-1"><strong>Ubicación:</strong> ${ubicacionLink}</p>
-                        <p class="small mb-1"><strong>Plan:</strong> ${order.instalacion?.plan || '-'}</p>
-                        <p class="small mb-1"><strong>Instalar:</strong> ${fechaTxt}</p>
-                        <p class="small mb-1"><strong>Descripción:</strong> ${order.descripcion || '-'}</p>
-                        
-                        <hr>
-                        
-                        <form id="materialsForm-${order.id}" onsubmit="event.preventDefault(); teamPanel.markCompleted('${order.id}')">
-                            <h6 class="text-secondary mt-3 mb-2"><i class="fas fa-boxes me-2"></i>Finalización de Orden</h6>
-
-                            <div class="mb-3">
-                                <label class="form-label small mb-1">¿Se utilizaron materiales?</label>
-                                <div>
-                                    <div class="form-check form-check-inline">
-                                        <input class="form-check-input" type="radio" name="materialesUsados" id="matYes-${order.id}" value="si" required onclick="document.getElementById('materialsDetail-${order.id}').style.display='block';">
-                                        <label class="form-check-label" for="matYes-${order.id}">Sí</label>
-                                    </div>
-                                    <div class="form-check form-check-inline">
-                                        <input class="form-check-input" type="radio" name="materialesUsados" id="matNo-${order.id}" value="no" required checked onclick="document.getElementById('materialsDetail-${order.id}').style.display='none';">
-                                        <label class="form-check-label" for="matNo-${order.id}">No</label>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div id="materialsDetail-${order.id}" style="display: none; border: 1px solid #ddd; padding: 10px; border-radius: 5px; margin-bottom: 15px;">
-                                <h6 class="text-primary small mb-3"><i class="fas fa-hammer me-1"></i>Registro de Materiales</h6>
+                <div class="accordion mb-3" id="orderAccordion-${order.id}"> 
+                    <div class="accordion-item shadow-sm border-0">
+                        <h2 class="accordion-header ${badgeClass}" id="heading-${order.id}">
+                            <button class="accordion-button collapsed py-2 ${badgeClass}" type="button" 
+                                    data-bs-toggle="collapse" data-bs-target="#collapse-${order.id}" aria-expanded="false" 
+                                    aria-controls="collapse-${order.id}">
                                 
-                                <div class="accordion accordion-flush accordion-sm" id="accordionMaterials-${order.id}">
-                                    
-                                    <div class="accordion-item">
-                                        <h2 class="accordion-header">
-                                            <button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#collapseFibra-${order.id}">
-                                                <i class="fas fa-plug me-2"></i> Fibra Óptica / GPON
-                                            </button>
-                                        </h2>
-                                        <div id="collapseFibra-${order.id}" class="accordion-collapse collapse" data-bs-parent="#accordionMaterials-${order.id}">
-                                            <div class="accordion-body pt-3 pb-0">
-                                                <div class="row">
-                                                    ${fibraInputs}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="accordion-item">
-                                        <h2 class="accordion-header">
-                                            <button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#collapseCoaxial-${order.id}">
-                                                <i class="fas fa-cable-car me-2"></i> Coaxial / HFC
-                                            </button>
-                                        </h2>
-                                        <div id="collapseCoaxial-${order.id}" class="accordion-collapse collapse" data-bs-parent="#accordionMaterials-${order.id}">
-                                            <div class="accordion-body pt-3 pb-0">
-                                                <div class="row">
-                                                    ${coaxialInputs}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div class="accordion-item">
-                                        <h2 class="accordion-header">
-                                            <button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#collapseVarios-${order.id}">
-                                                <i class="fas fa-screwdriver-wrench me-2"></i> Herrajes y Varios
-                                            </button>
-                                        </h2>
-                                        <div id="collapseVarios-${order.id}" class="accordion-collapse collapse" data-bs-parent="#accordionMaterials-${order.id}">
-                                            <div class="accordion-body pt-3 pb-0">
-                                                <div class="row">
-                                                    ${variosInputs}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
+                                <div class="d-flex flex-column align-items-start me-auto">
+                                    <strong class="me-2">${dayDate} | ${order.cliente?.nombre || 'Cliente sin nombre'}</strong>
+                                    <small class="text-white-75">
+                                        <i class="fas fa-clock me-1"></i> ${schedule} | 
+                                        <i class="fas fa-tag me-1"></i> ${tipo}
+                                    </small>
                                 </div>
+                                <small class="text-white-75">#${order.id.substr(-6)}</small>
 
-                                <hr class="my-3">
-                                <div class="row">
-                                    ${otherMaterial}
-                                </div>
-                            </div>
+                            </button>
+                        </h2>
+                        
+                        <div id="collapse-${order.id}" class="accordion-collapse collapse" aria-labelledby="heading-${order.id}">
+                            <div class="accordion-body p-3">
+                                <p class="small text-muted mb-1">Creada por: <strong>${order.creadoPor || '-'}</strong></p>
+                                <p class="small mb-1"><i class="fas fa-id-card me-2"></i>DNI: ${order.cliente?.dni || '-'}</p>
+                                <p class="small mb-1"><strong>N° Cliente:</strong> ${order.cliente?.numeroCliente || '-'}</p>
+                                <p class="small mb-1"><i class="fas fa-phone me-2"></i>Teléfono: ${order.cliente?.telefono || '-'}</p>
+                                <p class="small mb-1"><i class="fas fa-map-marker-alt me-2"></i>${order.domicilio?.direccion || '-'} ${order.domicilio?.numero || ''}</p>
+                                <p class="small mb-1"><strong>Ubicación:</strong> ${ubicacionLink}</p>
+                                <p class="small mb-1"><strong>Plan:</strong> ${order.instalacion?.plan || '-'}</p>
+                                <p class="small mb-1"><strong>Instalar:</strong> ${fechaDate ? fechaDate.toLocaleString('es-ES') : '-'}</p>
+                                <p class="small mb-1"><strong>Descripción:</strong> ${order.descripcion || '-'}</p>
+                                
+                                <hr>
+                                
+                                <form id="materialsForm-${order.id}" onsubmit="event.preventDefault(); teamPanel.markCompleted('${order.id}')">
+                                    <h6 class="text-secondary mt-3 mb-2"><i class="fas fa-boxes me-2"></i>Finalización de Orden</h6>
 
-                            <div class="col-12 mb-3">
-                                <label for="comentario-${order.id}" class="form-label small mb-0">Comentario General/Observación</label>
-                                <textarea class="form-control form-control-sm" id="comentario-${order.id}" name="comentario" rows="2" placeholder="Observaciones adicionales sobre la orden, estado del trabajo o el cliente..."></textarea>
+                                    <div class="mb-3">
+                                        <label class="form-label small mb-1">¿Se utilizaron materiales?</label>
+                                        <div>
+                                            <div class="form-check form-check-inline">
+                                                <input class="form-check-input" type="radio" name="materialesUsados" id="matYes-${order.id}" value="si" required onclick="document.getElementById('materialsDetail-${order.id}').style.display='block';">
+                                                <label class="form-check-label" for="matYes-${order.id}">Sí</label>
+                                            </div>
+                                            <div class="form-check form-check-inline">
+                                                <input class="form-check-input" type="radio" name="materialesUsados" id="matNo-${order.id}" value="no" required checked onclick="document.getElementById('materialsDetail-${order.id}').style.display='none';">
+                                                <label class="form-check-label" for="matNo-${order.id}">No</label>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div id="materialsDetail-${order.id}" style="display: none; border: 1px solid #ddd; padding: 10px; border-radius: 5px; margin-bottom: 15px;">
+                                        <h6 class="text-primary small mb-3"><i class="fas fa-hammer me-1"></i>Registro de Materiales</h6>
+                                        
+                                        <div class="accordion accordion-flush accordion-sm" id="accordionMaterials-${order.id}">
+                                            
+                                            <div class="accordion-item">
+                                                <h2 class="accordion-header">
+                                                    <button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#collapseFibra-${order.id}">
+                                                        <i class="fas fa-plug me-2"></i> Fibra Óptica / GPON
+                                                    </button>
+                                                </h2>
+                                                <div id="collapseFibra-${order.id}" class="accordion-collapse collapse" data-bs-parent="#accordionMaterials-${order.id}">
+                                                    <div class="accordion-body pt-3 pb-0">
+                                                        <div class="row">
+                                                            ${fibraInputs}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="accordion-item">
+                                                <h2 class="accordion-header">
+                                                    <button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#collapseCoaxial-${order.id}">
+                                                        <i class="fas fa-cable-car me-2"></i> Coaxial / HFC
+                                                    </button>
+                                                </h2>
+                                                <div id="collapseCoaxial-${order.id}" class="accordion-collapse collapse" data-bs-parent="#accordionMaterials-${order.id}">
+                                                    <div class="accordion-body pt-3 pb-0">
+                                                        <div class="row">
+                                                            ${coaxialInputs}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="accordion-item">
+                                                <h2 class="accordion-header">
+                                                    <button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#collapseVarios-${order.id}">
+                                                        <i class="fas fa-screwdriver-wrench me-2"></i> Herrajes y Varios
+                                                    </button>
+                                                </h2>
+                                                <div id="collapseVarios-${order.id}" class="accordion-collapse collapse" data-bs-parent="#accordionMaterials-${order.id}">
+                                                    <div class="accordion-body pt-3 pb-0">
+                                                        <div class="row">
+                                                            ${variosInputs}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                        </div>
+
+                                        <hr class="my-3">
+                                        <div class="row">
+                                            ${otherMaterial}
+                                        </div>
+                                    </div>
+
+                                    <div class="col-12 mb-3">
+                                        <label for="comentario-${order.id}" class="form-label small mb-0">Comentario General/Observación</label>
+                                        <textarea class="form-control form-control-sm" id="comentario-${order.id}" name="comentario" rows="2" placeholder="Observaciones adicionales sobre la orden, estado del trabajo o el cliente..."></textarea>
+                                    </div>
+                                    
+                                    <button type="submit" class="btn btn-success btn-sm w-100 mt-2"><i class="fas fa-check me-1"></i>Marcar como Completada</button>
+                                </form>
                             </div>
-                            
-                            <button type="submit" class="btn btn-success btn-sm w-100 mt-2"><i class="fas fa-check me-1"></i>Marcar como Completada</button>
-                        </form>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -516,4 +569,5 @@ class EquipoPanel {
 window.addEventListener('DOMContentLoaded', () => {
     window.teamPanel = new EquipoPanel();
 });
+
 
