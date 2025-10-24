@@ -55,7 +55,10 @@
                                 <option value="todos">Todos</option>
                                 <option value="alerta">Solo Alerta</option>
                             </select>
-                            <button class="btn btn-sm btn-primary ms-2" data-bs-toggle="modal" data-bs-target="#modalIngresoStock">
+                            <button class="btn btn-sm btn-warning ms-2 me-2" data-bs-toggle="modal" data-bs-target="#modalAjusteStock">
+                                <i class="fas fa-edit me-1"></i> Ajuste
+                            </button>
+                            <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#modalIngresoStock">
                                 <i class="fas fa-plus me-1"></i> Ingreso
                             </button>
                         </div>
@@ -222,7 +225,75 @@
             </div>
         </div>
     </div>
+    
+    <div class="modal fade" id="modalAjusteStock" tabindex="-1" aria-labelledby="modalAjusteStockLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title" id="modalAjusteStockLabel"><i class="fas fa-edit me-2"></i>Ajuste/Re-asignación de Stock</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="formAjusteStock" class="needs-validation" novalidate>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label for="tipoAjuste" class="form-label">Tipo de Operación</label>
+                            <select class="form-select" id="tipoAjuste" required>
+                                <option value="" disabled selected>-- Seleccione el Tipo --</option>
+                                <option value="ajusteGeneral">Ajuste Directo (Stock General)</option>
+                                <option value="devolucion">Devolución a General (Equipo -> General)</option>
+                                <option value="reparacion">Re-asignación (Equipo -> Equipo)</option>
+                            </select>
+                            <div class="invalid-feedback">Por favor, selecciona el tipo de operación.</div>
+                        </div>
 
+                        <div class="mb-3 d-none" id="equipoOrigenContainer">
+                            <label for="equipoOrigen" class="form-label">Equipo Origen (Descontar Stock)</label>
+                            <select class="form-select" id="equipoOrigen" required>
+                                <option value="" disabled selected>-- Seleccione --</option>
+                                <option value="1">Equipo 1</option>
+                                <option value="2">Equipo 2</option>
+                                <option value="3">Equipo 3</option>
+                                <option value="4">Equipo 4</option>
+                                <option value="5">Equipo 5</option>
+                            </select>
+                            <div class="invalid-feedback">Selecciona el equipo de origen.</div>
+                        </div>
+
+                         <div class="mb-3 d-none" id="equipoDestinoContainer">
+                            <label for="equipoDestino" class="form-label">Equipo Destino (Aumentar Stock)</label>
+                            <select class="form-select" id="equipoDestino" required>
+                                <option value="" disabled selected>-- Seleccione --</option>
+                                <option value="1">Equipo 1</option>
+                                <option value="2">Equipo 2</option>
+                                <option value="3">Equipo 3</option>
+                                <option value="4">Equipo 4</option>
+                                <option value="5">Equipo 5</option>
+                            </select>
+                            <div class="invalid-feedback">Selecciona el equipo de destino.</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="ajusteNotes" class="form-label">Motivo del Ajuste/Re-asignación</label>
+                            <input type="text" class="form-control" id="ajusteNotes" required>
+                            <div class="invalid-feedback">Ingresa el motivo del ajuste.</div>
+                        </div>
+                        <hr>
+                        <h6>Cantidades a Ajustar/Mover:</h6>
+                        <p class="text-muted small">
+                            **Ajuste General:** Positivo (+) para aumentar, Negativo (-) para disminuir.<br>
+                            **Devolución/Re-asignación:** Siempre positivo (+), se descuenta de Equipo Origen.
+                        </p>
+                        <div id="ajusteStockInputs">
+                            </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-warning"><i class="fas fa-check-circle me-2"></i>Confirmar Ajuste/Movimiento</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
