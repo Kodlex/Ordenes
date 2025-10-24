@@ -6,6 +6,7 @@ class StockManager {
         this.unsubscribeStockEquipos = [];
         this.unsubscribeStockMovements = null; // NUEVO: Listener para movimientos
         this.stockGeneralData = {};
+        this.stockEquiposAllData = {}; // NUEVO: Almacena todo el stock de equipos para validación
         this.TEAMS = ['1', '2', '3', '4', '5'];
         this.managerUser = null; // Se inicializa en checkLogin
         
@@ -50,6 +51,11 @@ class StockManager {
         document.getElementById('formIngresoStock')?.addEventListener('submit', (e) => this.handleIngresoStock(e));
         document.getElementById('formAsignarMaterial')?.addEventListener('submit', (e) => this.handleAsignarMaterial(e));
         
+        // --- INICIO: NUEVOS LISTENERS PARA AJUSTE/RE-ASIGNACIÓN ---
+        document.getElementById('formAjusteStock')?.addEventListener('submit', (e) => this.handleAjusteStock(e));
+        document.getElementById('tipoAjuste')?.addEventListener('change', () => this.toggleAjusteInputs());
+        // --- FIN: NUEVOS LISTENERS ---
+        
         // --- LISTENERS PARA FILTROS ---
         document.getElementById('filtroStockGeneral')?.addEventListener('input', () => this.applyStockGeneralFilters());
         document.getElementById('filtroAlertaStock')?.addEventListener('change', () => this.applyStockGeneralFilters());
@@ -60,6 +66,7 @@ class StockManager {
         // --- FIN LISTENERS ---
 
         this.generateStockModalInputs();
+        this.generateAjusteModalInputs(); // <-- LLAMADA A FUNCIÓN NUEVA
         this.loadStockGeneralRealtime();
         this.loadAsignacionEquiposRealtime();
         this.loadStockMovementsRealtime(); // NUEVO: Carga la trazabilidad
@@ -102,16 +109,34 @@ class StockManager {
             const dateStr = date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
             
             const isEntry = m.type === 'ENTRADA';
-            const icon = isEntry ? 'fas fa-arrow-circle-up text-success' : 'fas fa-arrow-circle-down text-danger';
-            const teamInfo = m.teamId ? `(Equipo ${m.teamId})` : '';
+            const isAdjust = m.type.includes('AJUSTE');
+            const isAssign = m.type === 'ASIGNACION';
+            const isDevolucion = m.type === 'Devolución (Eq General)';
+
+            let icon = 'fas fa-arrow-circle-right text-info';
+            let colorClass = '';
+            
+            if (isEntry || isDevolucion || m.type.includes('(+)')) {
+                icon = 'fas fa-arrow-circle-up text-success';
+            } else if (isAssign || m.type.includes('(-)') || m.type.includes('ASIGNACION')) {
+                icon = 'fas fa-arrow-circle-down text-danger';
+            } else if (m.type.includes('Re-asignación')) {
+                 icon = 'fas fa-exchange-alt text-warning';
+                 colorClass = 'text-warning';
+            }
+            
+            // Si el campo 'notes' ya tiene el signo y la cantidad, solo se muestra el resto de la nota.
+            const noteText = m.notes;
+            const teamInfo = m.teamId && m.type !== 'ENTRADA' && !m.type.includes('General') ? `(Equipo ${m.teamId})` : '';
+
 
             return `
-                <li class="list-group-item p-2 d-flex justify-content-between align-items-start">
+                <li class="list-group-item p-2 d-flex justify-content-between align-items-start ${colorClass}">
                     <div>
                         <i class="${icon} me-2"></i> 
-                        <strong>${m.materialLabel}</strong>: ${isEntry ? '+' : '-'} ${m.quantity.toFixed(0)} ${m.unidad} ${teamInfo}
+                        <strong>${m.materialLabel}</strong>: ${m.type.replace('General', '').replace('(+)', '').replace('(-)', '')} ${teamInfo}
                         <div class="text-muted small">
-                            ${m.notes || (isEntry ? 'Ingreso de proveedor' : 'Asignación de material')}
+                            ${noteText}
                         </div>
                     </div>
                     <small class="text-end text-muted mt-1">
@@ -134,6 +159,9 @@ class StockManager {
             return;
         }
         
+        // Define el signo para la nota
+        const sign = type === 'ENTRADA' ? '+' : (type === 'ASIGNACION' ? '-' : '');
+        
         const movementData = {
             type: type, // 'ENTRADA' o 'ASIGNACION'
             materialId: materialId,
@@ -142,7 +170,7 @@ class StockManager {
             quantity: quantity,
             timestamp: firebase.firestore.FieldValue.serverTimestamp(),
             manager: this.managerUser || 'Admin_Desconocido', // Usuario logeado
-            notes: notes,
+            notes: `${sign} ${quantity.toFixed(0)} ${materialDetails.unidad}. ${notes}`, // Nuevo formato de notas para trazabilidad
             teamId: teamId
         };
         
@@ -158,7 +186,8 @@ class StockManager {
     // =========== LÓGICA DE FILTRO Y REPORTE DE CONSUMO ===============
     // =================================================================
     
-    // Utilidad para establecer las fechas por defecto para el filtro (ej. 30 días)
+    // ... (El código de los reportes es el mismo)
+    
     setDefaultReportDates() {
         const endDateInput = document.getElementById('endDateFilterUsed');
         const startDateInput = document.getElementById('startDateFilterUsed');
@@ -167,7 +196,6 @@ class StockManager {
             const last30Days = new Date();
             last30Days.setDate(today.getDate() - 30);
             
-            // Función auxiliar para formatear la fecha a YYYY-MM-DD
             const formatDate = (date) => {
                 const y = date.getFullYear();
                 const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -180,11 +208,9 @@ class StockManager {
         }
     }
     
-    // Maneja el envío del formulario de filtros de materiales consumidos
     handleUsedMaterialsFilter(e) {
         e.preventDefault();
         const form = document.getElementById('formUsedMaterialsFilter');
-        // Usa la validación de Bootstrap para requerir los campos
         form.classList.add('was-validated'); 
         if (!form.checkValidity()) {
             return;
@@ -194,16 +220,13 @@ class StockManager {
         const startDateStr = document.getElementById('startDateFilterUsed').value;
         const endDateStr = document.getElementById('endDateFilterUsed').value;
 
-        // Las fechas de entrada son YYYY-MM-DD
         const startDate = new Date(startDateStr);
-        // Para incluir todo el día de fin, sumamos 23:59:59.999
         const endDate = new Date(endDateStr);
         endDate.setHours(23, 59, 59, 999); 
         
         this.loadUsedMaterialsReport(equipoId, startDate, endDate);
     }
     
-    // Carga y procesa el reporte de materiales consumidos
     async loadUsedMaterialsReport(equipoId, startDate, endDate) {
         const container = document.getElementById('usedMaterialsContainer');
         container.innerHTML = `<div class="text-center text-muted py-5">
@@ -212,15 +235,12 @@ class StockManager {
                                </div>`;
 
         try {
-            // Se asume que 'db' y 'firebase' están disponibles globalmente (desde script_firebase.js)
             const startTimestamp = firebase.firestore.Timestamp.fromDate(startDate);
             const endTimestamp = firebase.firestore.Timestamp.fromDate(endDate);
             
-            // 1. Consultar órdenes completadas para el equipo en el rango de fechas
             const q = db.collection('ordenes')
                 .where('estado', '==', 'completado')
                 .where('instalacion.equipo', '==', equipoId)
-                // 'fechaCompletado' es el campo de la orden completada por el técnico
                 .where('fechaCompletado', '>=', startTimestamp)
                 .where('fechaCompletado', '<=', endTimestamp)
                 .orderBy('fechaCompletado', 'desc');
@@ -228,7 +248,6 @@ class StockManager {
             const snapshot = await q.get();
             const completedOrders = snapshot.docs.map(doc => doc.data());
 
-            // 2. Agregar los materiales gastados de todas las órdenes
             const aggregation = {};
             let totalOrders = 0;
 
@@ -236,10 +255,8 @@ class StockManager {
                 const materiales = order.materialesGastados || {};
                 totalOrders++;
                 
-                // Iterar sobre la lista de materiales estándar (solo los de tipo 'number')
                 this.stockMateriales.forEach(m => {
                     if (m.type === 'number') {
-                        // Usamos parseInt para asegurarnos de que el valor sea un número
                         const consumed = parseInt(materiales[m.id] || 0);
                         if (consumed > 0) {
                             aggregation[m.id] = (aggregation[m.id] || 0) + consumed;
@@ -248,7 +265,6 @@ class StockManager {
                 });
             });
 
-            // 3. Renderizar el reporte
             this.renderUsedMaterialsReport(aggregation, equipoId, startDate, endDate, totalOrders);
 
         } catch (err) {
@@ -259,22 +275,20 @@ class StockManager {
         }
     }
 
-    // Renderiza la tabla de Materiales Consumidos
     renderUsedMaterialsReport(aggregation, equipoId, startDate, endDate, totalOrders) {
         const container = document.getElementById('usedMaterialsContainer');
         const options = { year: 'numeric', month: 'short', day: 'numeric' };
         const startTxt = startDate.toLocaleDateString('es-ES', options);
         const endTxt = endDate.toLocaleDateString('es-ES', options);
         
-        // Filtrar y preparar los materiales utilizados
         const aggregatedMaterials = this.stockMateriales
-            .filter(m => m.type === 'number') // Solo materiales con cantidad
+            .filter(m => m.type === 'number')
             .map(m => ({
                 label: m.label,
                 unidad: m.unidad,
                 total: aggregation[m.id] || 0
             }))
-            .filter(m => m.total > 0); // Solo mostrar los que se usaron
+            .filter(m => m.total > 0);
 
         if (totalOrders === 0) {
             container.innerHTML = `<div class="text-muted p-3 text-center">
@@ -334,14 +348,12 @@ class StockManager {
                 if (doc.exists) {
                     this.stockGeneralData = doc.data() || {};
                     this.renderStockGeneral();
-                    // Obtener el umbral del conector FTTH (como referencia)
                     const sampleMinStock = this.stockMateriales.find(m => m.id === 'conectorFTTH')?.minStock || 30;
                     document.getElementById('minStockDisplay').textContent = `${sampleMinStock} u`;
                 } else {
                     this.stockGeneralData = {};
                     this.renderStockGeneral();
                     console.log("Documento de stock general no encontrado. Creando uno vacío.");
-                    // Inicializar si no existe
                     db.collection('stockGeneral').doc('general').set({});
                 }
             }, err => {
@@ -359,7 +371,6 @@ class StockManager {
         const filteredMaterials = this.stockMateriales.filter(m => m.type === 'number').filter(m => {
             const label = m.label.toLowerCase();
             const stock = this.stockGeneralData[m.id] || 0;
-            // Usamos el minStock definido para el umbral de alerta
             const minStock = m.minStock || 50; 
             const isInAlert = stock < minStock; 
 
@@ -459,11 +470,10 @@ class StockManager {
 
         try {
             const batch = db.batch();
-            batch.set(stockGeneralRef, updates, { merge: true }); // Usamos SET con merge para asegurar que el doc exista
+            batch.set(stockGeneralRef, updates, { merge: true });
             
             await batch.commit();
 
-            // Registrar movimientos DEPUÉS de la actualización exitosa
             for (const mov of movements) {
                 await this.registerStockMovement('ENTRADA', mov.materialId, mov.quantity, mov.notes);
             }
@@ -486,40 +496,39 @@ class StockManager {
     loadAsignacionEquiposRealtime() {
         const container = document.getElementById('asignacionEquiposContainer');
         
-        // CORRECCIÓN: Limpiar el mensaje inicial de "Cargando stock de equipos..."
         if (container) {
-            // Limpiamos el HTML para que las tarjetas de los equipos se añadan de cero
-            // Si tiene hijos y el primer hijo contiene el texto de carga.
             if (container.children.length === 1 && container.children[0].textContent.includes('Cargando stock de equipos')) {
                  container.innerHTML = '';
             }
         }
 
-        // Limpiar listeners anteriores
         this.unsubscribeStockEquipos.forEach(unsub => unsub());
         this.unsubscribeStockEquipos = [];
+        this.stockEquiposAllData = {}; // Reset data before loading
 
         this.TEAMS.forEach(equipoId => {
             const unsub = db.collection('stockEquipos').doc(`equipo_${equipoId}`)
                 .onSnapshot(doc => {
                     const data = doc.data() || {};
+                    this.stockEquiposAllData[equipoId] = data; // ACTUALIZA DATA CENTRAL
                     this.renderStockEquipo(equipoId, data);
-                    this.applyAsignacionEquiposFilter(); // Re-renderiza para aplicar filtro
+                    this.applyAsignacionEquiposFilter();
                 }, err => {
                     console.error(`Error al obtener stock de Equipo ${equipoId}:`, err);
                 });
             this.unsubscribeStockEquipos.push(unsub);
         });
     }
-
+    
+    // ... (El resto de funciones de asignación son las mismas)
+    
     renderStockEquipo(equipoId, data) {
         const container = document.getElementById('asignacionEquiposContainer');
         let equipoCard = document.getElementById(`equipoCard_${equipoId}`);
 
-        if (!container) return; // Salir si el contenedor no existe
+        if (!container) return;
 
         if (!equipoCard) {
-            // Si la tarjeta no existe, la creamos y la añadimos al contenedor.
             equipoCard = document.createElement('div');
             equipoCard.id = `equipoCard_${equipoId}`;
             equipoCard.classList.add('accordion-item', 'mb-2');
@@ -529,7 +538,7 @@ class StockManager {
         const itemsHTML = this.stockMateriales.filter(m => m.type === 'number').map(m => {
             const stock = data[m.id] || 0;
             const minStock = m.minStock || 10;
-            const isLow = stock < minStock; // Umbral de alerta por equipo
+            const isLow = stock < minStock;
             return `
                 <li class="list-group-item d-flex justify-content-between align-items-center p-1 small" data-material="${m.label.toLowerCase()}">
                     ${m.label}
@@ -598,7 +607,6 @@ class StockManager {
             </div>
         `).join('');
         
-        // Reemplazar IDs para el modal de Asignación
         const asignarHTML = this.stockMateriales.filter(m => m.type === 'number').map(m => `
             <div class="mb-3">
                 <label for="asignar_${m.id}" class="form-label">${m.label} (${m.unidad})</label>
@@ -611,6 +619,260 @@ class StockManager {
         if(inputContainerIngreso) inputContainerIngreso.innerHTML = inputsHTML;
         if(inputContainerAsignar) inputContainerAsignar.innerHTML = asignarHTML;
     }
+
+    // INICIO: NUEVAS FUNCIONES PARA AJUSTE/RE-ASIGNACIÓN
+
+    // Genera inputs específicos para el modal de ajuste (permite negativos)
+    generateAjusteModalInputs() {
+        const inputContainerAjuste = document.getElementById('ajusteStockInputs');
+        
+        const ajusteHTML = this.stockMateriales.filter(m => m.type === 'number').map(m => `
+            <div class="mb-3">
+                <label for="ajuste_${m.id}" class="form-label">${m.label} (${m.unidad})</label>
+                <input type="number" class="form-control" id="ajuste_${m.id}" name="${m.id}" value="0"> 
+                <div class="invalid-feedback" id="feedback_ajuste_${m.id}">Ingresa una cantidad.</div>
+            </div>
+        `).join('');
+
+        if(inputContainerAjuste) inputContainerAjuste.innerHTML = ajusteHTML;
+    }
+    
+    // Muestra/Oculta selectores de equipos según el tipo de ajuste
+    toggleAjusteInputs() {
+        const tipoAjuste = document.getElementById('tipoAjuste').value;
+        const origenContainer = document.getElementById('equipoOrigenContainer');
+        const destinoContainer = document.getElementById('equipoDestinoContainer');
+        const origenSelect = document.getElementById('equipoOrigen');
+        const destinoSelect = document.getElementById('equipoDestino');
+
+        // Reset
+        origenContainer.classList.add('d-none');
+        destinoContainer.classList.add('d-none');
+        origenSelect.required = false;
+        destinoSelect.required = false;
+
+        if (tipoAjuste === 'devolucion') {
+            origenContainer.classList.remove('d-none');
+            origenSelect.required = true;
+        } else if (tipoAjuste === 'reparacion') {
+            origenContainer.classList.remove('d-none');
+            destinoContainer.classList.remove('d-none');
+            origenSelect.required = true;
+            destinoSelect.required = true;
+        }
+    }
+    
+    async handleAjusteStock(e) {
+        e.preventDefault();
+        const form = document.getElementById('formAjusteStock');
+        form.classList.remove('was-validated'); 
+        
+        if (!form.checkValidity()) {
+            form.classList.add('was-validated');
+            return;
+        }
+        
+        const tipoAjuste = document.getElementById('tipoAjuste').value;
+        const equipoOrigen = document.getElementById('equipoOrigen').value;
+        const equipoDestino = document.getElementById('equipoDestino').value;
+        const ajusteNotes = document.getElementById('ajusteNotes').value.trim();
+
+        const updatesGeneral = {};
+        const updatesOrigen = {};
+        const updatesDestino = {};
+        const movements = [];
+        let hasUpdates = false;
+        let validationError = false;
+        let finalMessage = 'Stock ajustado con éxito.';
+
+        // Limpiar mensajes de error anteriores y preparar la validación de cantidad
+        this.stockMateriales.filter(m => m.type === 'number').forEach(m => {
+            const input = document.getElementById(`ajuste_${m.id}`);
+            input.classList.remove('is-invalid');
+            input.setCustomValidity('');
+            const feedback = document.getElementById(`feedback_ajuste_${m.id}`);
+            if (feedback) feedback.textContent = 'Ingresa una cantidad.';
+        });
+
+        this.stockMateriales.filter(m => m.type === 'number').forEach(m => {
+            const input = document.getElementById(`ajuste_${m.id}`);
+            const feedback = document.getElementById(`feedback_ajuste_${m.id}`);
+            // Usamos parseFloat ya que 'ajusteGeneral' permite negativos
+            const amount = parseFloat(input.value) || 0; 
+            
+            if (amount !== 0) {
+                if (tipoAjuste === 'ajusteGeneral') {
+                    // AJUSTE GENERAL: Positivo (+) suma, Negativo (-) resta
+                    const stockGeneral = this.stockGeneralData[m.id] || 0;
+                    if (stockGeneral + amount < 0) {
+                        input.setCustomValidity(`El ajuste de ${amount} llevaría el stock a un valor negativo. Stock actual: ${stockGeneral.toFixed(0)}.`);
+                        if (feedback) feedback.textContent = `El ajuste de ${amount} llevaría el stock a un valor negativo. Stock actual: ${stockGeneral.toFixed(0)}.`;
+                        input.classList.add('is-invalid');
+                        validationError = true;
+                    } else {
+                        updatesGeneral[m.id] = firebase.firestore.FieldValue.increment(amount);
+                        movements.push({ 
+                            type: amount > 0 ? 'AJUSTE (+)' : 'AJUSTE (-)', 
+                            materialId: m.id, 
+                            quantity: Math.abs(amount), 
+                            notes: ajusteNotes,
+                            teamId: null
+                        });
+                        hasUpdates = true;
+                    }
+
+                } else if (tipoAjuste === 'devolucion' || tipoAjuste === 'reparacion') {
+                    // DEVOLUCIÓN O RE-ASIGNACIÓN: Mueve stock entre inventarios. La cantidad (amount) debe ser positiva.
+                    if (amount <= 0) {
+                        input.setCustomValidity('Para Devolución/Re-asignación, la cantidad a mover debe ser positiva.');
+                        if (feedback) feedback.textContent = 'La cantidad a mover debe ser positiva.';
+                        input.classList.add('is-invalid');
+                        validationError = true;
+                        return;
+                    }
+                    
+                    // 1. DESCONTAR del equipo origen
+                    const equipoOrigenData = this.stockEquiposAllData[equipoOrigen] || {}; 
+                    const stockOrigen = equipoOrigenData[m.id] || 0; 
+
+                    if (amount > stockOrigen) {
+                        input.setCustomValidity(`Stock insuficiente en Equipo ${equipoOrigen}. Solo hay ${stockOrigen.toFixed(0)}.`);
+                        if (feedback) feedback.textContent = `Stock insuficiente en Equipo ${equipoOrigen}. Solo hay ${stockOrigen.toFixed(0)}.`;
+                        input.classList.add('is-invalid');
+                        validationError = true;
+                    } else {
+                        updatesOrigen[m.id] = firebase.firestore.FieldValue.increment(-amount);
+                        hasUpdates = true;
+
+                        if (tipoAjuste === 'devolucion') {
+                            // 2a. DEVOLUCIÓN: AUMENTAR stock general
+                            updatesGeneral[m.id] = firebase.firestore.FieldValue.increment(amount);
+                            movements.push({ 
+                                type: 'DEVOLUCION', 
+                                materialId: m.id, 
+                                quantity: amount, 
+                                notes: ajusteNotes, 
+                                teamId: equipoOrigen 
+                            });
+                            finalMessage = `Materiales devueltos a Stock General desde Equipo ${equipoOrigen}.`;
+                        } else {
+                            // 2b. RE-ASIGNACIÓN: AUMENTAR stock de equipo destino
+                            updatesDestino[m.id] = firebase.firestore.FieldValue.increment(amount);
+                            movements.push({ 
+                                type: 'REASIGNACION', 
+                                materialId: m.id, 
+                                quantity: amount, 
+                                notes: ajusteNotes, 
+                                teamId: equipoOrigen, // Se registra desde el origen
+                                targetTeamId: equipoDestino
+                            });
+                            finalMessage = `Materiales re-asignados de Equipo ${equipoOrigen} a Equipo ${equipoDestino}.`;
+                        }
+                    }
+                }
+            } else {
+                 input.setCustomValidity('');
+            }
+        });
+        
+        if (validationError) {
+            form.classList.add('was-validated');
+            this.showError('Revisa los campos con error: Stock insuficiente o cantidad inválida.', 'Validación Fallida');
+            return;
+        }
+
+        if (!hasUpdates) {
+            this.showSuccess('No se ingresó ninguna cantidad para ajustar/mover.', 'Sin Cambios');
+            return;
+        }
+
+        const batch = db.batch(); 
+        
+        // Ejecutar las transacciones en lote
+        if (Object.keys(updatesGeneral).length > 0) {
+            batch.set(db.collection('stockGeneral').doc('general'), updatesGeneral, { merge: true });
+        }
+        // Solo aplica si no es ajuste general
+        if (Object.keys(updatesOrigen).length > 0) {
+            batch.set(db.collection('stockEquipos').doc(`equipo_${equipoOrigen}`), updatesOrigen, { merge: true });
+        }
+        // Solo aplica si es re-asignación
+        if (Object.keys(updatesDestino).length > 0) {
+            batch.set(db.collection('stockEquipos').doc(`equipo_${equipoDestino}`), updatesDestino, { merge: true });
+        }
+
+        try {
+            await batch.commit();
+
+            // Registrar movimientos DEPUÉS de la actualización exitosa
+            for (const mov of movements) {
+                // Se registra el movimiento con la función mejorada
+                await this.registerStockMovementAjuste(mov.type, mov.materialId, mov.quantity, mov.notes, mov.teamId, mov.targetTeamId);
+            }
+
+            this.showSuccess(finalMessage, 'Operación Exitosa');
+            form.reset();
+            form.classList.remove('was-validated');
+            // Resetear la visibilidad de los selectores
+            document.getElementById('equipoOrigenContainer').classList.add('d-none');
+            document.getElementById('equipoDestinoContainer').classList.add('d-none');
+            
+            const modal = bootstrap.Modal.getInstance(document.getElementById('modalAjusteStock'));
+            modal.hide();
+        } catch (err) {
+            console.error('Error al realizar el ajuste/movimiento de stock:', err);
+             this.showError('Error al procesar el movimiento. Revisa la consola.', 'Fallo en la Operación');
+        }
+    }
+    
+    // Función para registrar AJUSTES, DEVOLUCIONES y REASIGNACIONES
+    async registerStockMovementAjuste(type, materialId, quantity, notes, teamId = null, targetTeamId = null) {
+        const materialDetails = this.stockMateriales.find(m => m.id === materialId);
+        
+        if (!materialDetails) {
+            console.error(`Error: No se encontró el material con ID ${materialId}`);
+            return;
+        }
+        
+        let sign = '';
+        let movementTypeDisplay = type;
+        
+        if (type === 'AJUSTE (+)') {
+            sign = '+';
+            movementTypeDisplay = 'AJUSTE General';
+        } else if (type === 'AJUSTE (-)') {
+            sign = '-';
+            movementTypeDisplay = 'AJUSTE General';
+        } else if (type === 'DEVOLUCION') {
+            sign = '+'; 
+            movementTypeDisplay = `Devolución (Eq ${teamId} -> General)`;
+        } else if (type === 'REASIGNACION') {
+            sign = '±'; 
+            movementTypeDisplay = `Re-asignación (Eq ${teamId} -> Eq ${targetTeamId})`;
+        }
+
+        const quantityText = sign === '±' ? `${quantity.toFixed(0)}` : `${sign} ${quantity.toFixed(0)}`;
+
+        const movementData = {
+            type: movementTypeDisplay, 
+            materialId: materialId,
+            materialLabel: materialDetails.label,
+            unidad: materialDetails.unidad,
+            quantity: quantity,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+            manager: this.managerUser || 'Admin_Desconocido', 
+            notes: `${quantityText} ${materialDetails.unidad}. Motivo: ${notes}`,
+            teamId: teamId
+        };
+        
+        try {
+            await db.collection('stock_movements').add(movementData);
+        } catch (err) {
+            console.error('Error al registrar el movimiento de stock:', err);
+        }
+    }
+    
+    // FIN: NUEVAS FUNCIONES PARA AJUSTE/RE-ASIGNACIÓN
 
     async handleAsignarMaterial(e) {
         e.preventDefault();
@@ -628,7 +890,6 @@ class StockManager {
         let hasUpdates = false;
         let validationError = false;
         
-        // Limpiar mensajes de error anteriores
         this.stockMateriales.filter(m => m.type === 'number').forEach(m => {
             const input = document.getElementById(`asignar_${m.id}`);
             input.classList.remove('is-invalid');
@@ -655,11 +916,8 @@ class StockManager {
                     input.setCustomValidity('');
                     input.classList.remove('is-invalid');
                     
-                    // 1. Sumar al stock del equipo
                     asignacionUpdates[m.id] = firebase.firestore.FieldValue.increment(assigned);
-                    // 2. Descontar del stock general
                     stockGeneralUpdates[m.id] = firebase.firestore.FieldValue.increment(-assigned);
-                    // 3. Registrar para movimientos
                     movements.push({ materialId: m.id, quantity: assigned, notes: assignmentNotes, teamId: equipoId });
                     
                     hasUpdates = true;
@@ -683,13 +941,12 @@ class StockManager {
         const equipoRef = db.collection('stockEquipos').doc(`equipo_${equipoId}`);
         const stockGeneralRef = db.collection('stockGeneral').doc('general');
 
-        batch.set(equipoRef, asignacionUpdates, { merge: true }); // Usamos SET con merge para crear el documento si no existe
-        batch.update(stockGeneralRef, stockGeneralUpdates); // Usamos UPDATE ya que 'general' siempre debería existir
+        batch.set(equipoRef, asignacionUpdates, { merge: true });
+        batch.update(stockGeneralRef, stockGeneralUpdates);
 
         try {
             await batch.commit();
 
-            // Registrar movimientos DEPUÉS de la actualización exitosa
             for (const mov of movements) {
                 await this.registerStockMovement('ASIGNACION', mov.materialId, mov.quantity, mov.notes, mov.teamId);
             }
@@ -738,10 +995,8 @@ class StockManager {
 }
 
 window.addEventListener('DOMContentLoaded', ()=>{
-    // Asegúrate de que SweetAlert2 esté cargado antes de inicializar StockManager
     if (typeof Swal === 'undefined') {
         console.error("SweetAlert2 no está cargado. Usando alertas nativas.");
-        // Fallback a alertas nativas si Swal no existe (aunque se incluyó en el HTML)
         StockManager.prototype.showSuccess = function(message) { alert(`Éxito: ${message}`); };
         StockManager.prototype.showError = function(message) { alert(`Error: ${message}`); };
     }
