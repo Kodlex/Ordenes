@@ -1,7 +1,7 @@
     {
-      "versionCode": 8,
-      "versionName": "1.1.8",
-      "apkUrl": "https://firebasestorage.googleapis.com/v0/b/ordenes-instalacion.firebasestorage.app/o/Descargas%2Fapp-debug.apk?alt=media&token=db185d2b-ce7c-4c54-b364-1c7a0b09e743",
+      "versionCode": 9,
+      "versionName": "1.1.9",
+      "apkUrl": "https://firebasestorage.googleapis.com/v0/b/ordenes-instalacion.firebasestorage.app/o/Descargas%2Fapp-debug.apk?alt=media&token=87f6fad6-4f10-4ba5-88ae-143495106a94",
       "releaseNotes": "- Mejora en la velocidad de carga.\n- Solución de errores en el stock."
     }
     
