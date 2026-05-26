@@ -1,7 +1,7 @@
     {
-      "versionCode": 11
-      "versionName": "1.1.11",
-      "apkUrl": "https://firebasestorage.googleapis.com/v0/b/ordenes-instalacion.firebasestorage.app/o/Descargas%2Fapp-debug.apk?alt=media&token=013162a0-c122-4749-8d80-1ab4f328abd7",
+      "versionCode": 12
+      "versionName": "1.1.12",
+      "apkUrl": "https://firebasestorage.googleapis.com/v0/b/ordenes-instalacion.firebasestorage.app/o/Descargas%2Fapp-debug.apk?alt=media&token=4b1a2a21-3ec2-4e36-a858-5f716c8f5ed8",
       "releaseNotes": "- Mejora en la velocidad de carga.\n- Solución de errores en el stock."
     }
     
